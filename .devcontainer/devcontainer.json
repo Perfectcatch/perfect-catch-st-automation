@@ -1,0 +1,22 @@
+{
+  "name": "Perfect Catch Automation Server",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
+  "appPort": ["3001:3001"],
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "22"
+    }
+  },
+  "envFile": ".env",
+  "postCreateCommand": "npm install",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  }
+}

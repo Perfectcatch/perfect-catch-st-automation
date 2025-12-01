@@ -1,0 +1,376 @@
+openapi: 3.0.3
+info:
+  title: Perfect Catch ST Automation API
+  description: ServiceTitan API proxy server for Perfect Catch Electric & Pools
+  version: 2.0.0
+  contact:
+    name: Development Team
+servers:
+  - url: http://localhost:3001
+    description: Local development server
+  - url: https://st-api.perfectcatch.com
+    description: Production server (example)
+
+tags:
+  - name: Health
+    description: Health check and status endpoints
+  - name: Jobs
+    description: ServiceTitan Job Management
+  - name: Customers
+    description: ServiceTitan CRM Customers
+  - name: Estimates
+    description: ServiceTitan Sales Estimates
+  - name: Opportunities
+    description: ServiceTitan Salestech Opportunities
+
+paths:
+  /ping:
+    get:
+      tags: [Health]
+      summary: Simple health check
+      responses:
+        '200':
+          description: Server is running
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  msg:
+                    type: string
+                    example: ServiceTitan MCP API is running
+
+  /health:
+    get:
+      tags: [Health]
+      summary: Detailed health check
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Server is degraded
+
+  /status:
+    get:
+      tags: [Health]
+      summary: Full system status
+      responses:
+        '200':
+          description: Status information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+
+  /jobs:
+    get:
+      tags: [Jobs]
+      summary: List all jobs
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+        - name: createdOnOrAfter
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: modifiedOnOrAfter
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: List of jobs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse'
+
+  /jobs/{id}:
+    get:
+      tags: [Jobs]
+      summary: Get job by ID
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          description: Job details
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /customers:
+    get:
+      tags: [Customers]
+      summary: List all customers
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+      responses:
+        '200':
+          description: List of customers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse'
+    post:
+      tags: [Customers]
+      summary: Create a customer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Customer created
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /customers/{id}:
+    get:
+      tags: [Customers]
+      summary: Get customer by ID
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          description: Customer details
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Customers]
+      summary: Update customer
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Customer updated
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /estimates:
+    get:
+      tags: [Estimates]
+      summary: List all estimates
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+      responses:
+        '200':
+          description: List of estimates
+    post:
+      tags: [Estimates]
+      summary: Create an estimate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Estimate created
+
+  /estimates/{id}:
+    get:
+      tags: [Estimates]
+      summary: Get estimate by ID
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          description: Estimate details
+    put:
+      tags: [Estimates]
+      summary: Update estimate
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Estimate updated
+
+  /estimates/{id}/sell:
+    put:
+      tags: [Estimates]
+      summary: Mark estimate as sold
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          description: Estimate sold
+
+  /estimates/{id}/unsell:
+    put:
+      tags: [Estimates]
+      summary: Unmark estimate as sold
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          description: Estimate unsold
+
+  /estimates/{id}/dismiss:
+    put:
+      tags: [Estimates]
+      summary: Dismiss estimate
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          description: Estimate dismissed
+
+  /opportunities:
+    get:
+      tags: [Opportunities]
+      summary: List all opportunities
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize'
+      responses:
+        '200':
+          description: List of opportunities
+
+  /opportunities/{id}:
+    get:
+      tags: [Opportunities]
+      summary: Get opportunity by ID
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          description: Opportunity details
+
+  /opportunities/{id}/followups:
+    get:
+      tags: [Opportunities]
+      summary: Get opportunity follow-ups
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          description: List of follow-ups
+
+components:
+  parameters:
+    id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+    pageSize:
+      name: pageSize
+      in: query
+      schema:
+        type: integer
+        default: 50
+        maximum: 5000
+
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded]
+        timestamp:
+          type: string
+          format: date-time
+        uptime:
+          type: integer
+        version:
+          type: string
+        components:
+          type: object
+
+    StatusResponse:
+      type: object
+      properties:
+        service:
+          type: string
+        version:
+          type: string
+        environment:
+          type: string
+        uptime:
+          type: object
+        token:
+          type: object
+        memory:
+          type: object
+
+    PaginatedResponse:
+      type: object
+      properties:
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        totalCount:
+          type: integer
+        hasMore:
+          type: boolean
+        data:
+          type: array
+          items:
+            type: object
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  securitySchemes:
+    ApiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+security:
+  - ApiKey: []
