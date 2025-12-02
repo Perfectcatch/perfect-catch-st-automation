@@ -1,0 +1,740 @@
+{
+  "name": "New Customers",
+  "nodes": [
+    {
+      "parameters": {
+        "fieldToSplitOut": "data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        592,
+        0
+      ],
+      "id": "f8566390-6cae-43d8-9c42-0e6f345c0fce",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "url": "=http://servicetitan-api:3001/customers?createdOnOrAfter={{ $json.value }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        384,
+        0
+      ],
+      "id": "38a20516-a038-4dd9-a396-e1498feba9b8",
+      "name": "Get New Customers"
+    },
+    {
+      "parameters": {
+        "url": "=http://servicetitan-api:3001/customers/{{ $json.fields[\"ST ID\"] }}/contacts\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1024,
+        0
+      ],
+      "id": "1db2ce09-8fad-4971-b979-15bc9959dd02",
+      "name": "Get Customer Contacts"
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = [];\n\nfor (let i = 0; i < items.length; i++) {\n\n  // 🔥 Pull ST ID from Airtable “fields”\n  const customerId = $item(i).$node[\"Create Customer Record\"].json.fields[\"ST ID\"];\n\n  const raw = items[i].json;\n  const contactList = raw.data || [];\n\n  let phone = null;\n  let email = null;\n\n  // First pass: explicit mobile + email\n  for (const c of contactList) {\n    if (c.type === \"MobilePhone\" && c.phoneSettings?.phoneNumber) {\n      phone = c.phoneSettings.phoneNumber;\n    }\n    if (c.type === \"Email\" && c.value) {\n      email = c.value;\n    }\n  }\n\n  // Fallback for any phone-type contact\n  if (!phone) {\n    const alt = contactList.find(\n      x => x.value && x.type && x.type.toLowerCase().includes(\"phone\")\n    );\n    if (alt) phone = alt.value;\n  }\n\n  results.push({\n    json: {\n      ST_ID: customerId,   // ← ✔ ALWAYS INCLUDED, ALWAYS CORRECT NOW\n      phone,\n      email\n    }\n  });\n}\n\nreturn results;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        0
+      ],
+      "id": "b6673138-8681-4794-ac4f-11f8ca901172",
+      "name": "Clean Customer Contacts JavaScript"
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "upsert",
+        "base": {
+          "__rl": true,
+          "value": "appqwG3SCJjFXkuly",
+          "mode": "list",
+          "cachedResultName": "Customer Database",
+          "cachedResultUrl": "https://airtable.com/appqwG3SCJjFXkuly"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblmQbM8FVfhgBlfc",
+          "mode": "list",
+          "cachedResultName": "Customer Records",
+          "cachedResultUrl": "https://airtable.com/appqwG3SCJjFXkuly/tblmQbM8FVfhgBlfc"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Name": "={{ $json.name }}",
+            "Type": "={{ $json.type }}",
+            "Street": "={{ $json.address.street }}",
+            "Unit": "={{ $json.address.unit }}",
+            "City": "={{ $json.address.city }}",
+            "State": "={{ $json.address.state }}",
+            "Zip": "={{ $json.address.zip }}",
+            "Country": "={{ $json.address.country }}",
+            "Latitude": "={{ $json.address.latitude }}",
+            "Longitude": "={{ $json.address.longitude }}",
+            "Created On": "={{ $json.createdOn }}",
+            "Modified On": "={{ $json.modifiedOn }}",
+            "ST ID": "={{ $json.id }}"
+          },
+          "matchingColumns": [
+            "ST ID"
+          ],
+          "schema": [
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "ST ID",
+              "displayName": "ST ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Type",
+              "displayName": "Type",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Residential",
+                  "value": "Residential"
+                },
+                {
+                  "name": "Commercial",
+                  "value": "Commercial"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Street",
+              "displayName": "Street",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Unit",
+              "displayName": "Unit",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "City",
+              "displayName": "City",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "State",
+              "displayName": "State",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Zip",
+              "displayName": "Zip",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Country",
+              "displayName": "Country",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Latitude",
+              "displayName": "Latitude",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Longitude",
+              "displayName": "Longitude",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Created On",
+              "displayName": "Created On",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Modified On",
+              "displayName": "Modified On",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        800,
+        0
+      ],
+      "id": "83072c17-c3ed-4651-a469-02ed35910205",
+      "name": "Create Customer Record",
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "xvAL1glm0cWGO5P3",
+          "name": "Airtable account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appqwG3SCJjFXkuly",
+          "mode": "list",
+          "cachedResultName": "Customer Database",
+          "cachedResultUrl": "https://airtable.com/appqwG3SCJjFXkuly"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblmQbM8FVfhgBlfc",
+          "mode": "list",
+          "cachedResultName": "Customer Records",
+          "cachedResultUrl": "https://airtable.com/appqwG3SCJjFXkuly/tblmQbM8FVfhgBlfc"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ST ID": "={{ $json.ST_ID }}",
+            "Phone": "={{ $json.phone }}",
+            "Email": "={{ $json.email }}"
+          },
+          "matchingColumns": [
+            "ST ID"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "ST ID",
+              "displayName": "ST ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Type",
+              "displayName": "Type",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Residential",
+                  "value": "Residential"
+                },
+                {
+                  "name": "Commercial",
+                  "value": "Commercial"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Street",
+              "displayName": "Street",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Unit",
+              "displayName": "Unit",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "City",
+              "displayName": "City",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "State",
+              "displayName": "State",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Zip",
+              "displayName": "Zip",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Country",
+              "displayName": "Country",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Latitude",
+              "displayName": "Latitude",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Longitude",
+              "displayName": "Longitude",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Created On",
+              "displayName": "Created On",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Modified On",
+              "displayName": "Modified On",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        1520,
+        0
+      ],
+      "id": "d04b1b3c-b924-4523-98be-9912a395f308",
+      "name": "Update Customer Record",
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "xvAL1glm0cWGO5P3",
+          "name": "Airtable account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 25
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -16,
+        0
+      ],
+      "id": "d6b5da46-37fa-41ad-8fa7-5236b25c99ec",
+      "name": "Run Every 5 Minutes"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "s4kuhTI63HyNYiCG",
+          "mode": "list",
+          "cachedResultName": "customer_sync_state",
+          "cachedResultUrl": "/projects/1Q5StXIOEuHUGWKz/datatables/s4kuhTI63HyNYiCG"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "key",
+              "keyValue": "lastCustomerPull"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        192,
+        0
+      ],
+      "id": "ad6b0c2e-2374-4e6b-a2e5-b23521a741be",
+      "name": "Get row(s)"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "s4kuhTI63HyNYiCG",
+          "mode": "list",
+          "cachedResultName": "customer_sync_state",
+          "cachedResultUrl": "/projects/1Q5StXIOEuHUGWKz/datatables/s4kuhTI63HyNYiCG"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "key",
+              "keyValue": "lastCustomerPull"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "value": "={{ $now.toISO() }}\n"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "key",
+              "displayName": "key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "value",
+              "displayName": "value",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        1968,
+        0
+      ],
+      "id": "2ab7d556-7932-4139-8fb6-83b0bce9ddd3",
+      "name": "Update row(s)"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Create Customer Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get New Customers": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Customer Contacts": {
+      "main": [
+        [
+          {
+            "node": "Clean Customer Contacts JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Customer Contacts JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Update Customer Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Customer Record": {
+      "main": [
+        [
+          {
+            "node": "Get Customer Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Get row(s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s)": {
+      "main": [
+        [
+          {
+            "node": "Get New Customers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Customer Record": {
+      "main": [
+        [
+          {
+            "node": "Update row(s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "31b95067-2b61-4571-87d0-4af6e4791398",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "00807938fc1a69be5be2dc5c7c7e25ace8211b30ff876662e3a9eeff61b4d9bb"
+  },
+  "id": "3sfPa4vi8192sm72",
+  "tags": []
+}

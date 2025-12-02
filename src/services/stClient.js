@@ -8,7 +8,7 @@ import fetch from 'node-fetch';
 import config from '../config/index.js';
 import { createLogger } from '../lib/logger.js';
 import { getAccessToken } from './tokenManager.js';
-import { fromServiceTitanResponse, RateLimitError, ServiceTitanError } from '../lib/errors.js';
+import { RateLimitError, ServiceTitanError } from '../lib/errors.js';
 
 const logger = createLogger('stClient');
 
@@ -130,71 +130,4 @@ export async function stRequest(url, options = {}) {
   }
 }
 
-/**
- * Express middleware-style proxy handler
- * Forwards requests to ServiceTitan and returns responses
- *
- * @param {string} stUrl - The ServiceTitan API URL
- * @param {object} options - Additional options
- * @returns {Function} Express route handler
- */
-export function createProxyHandler(stUrl, options = {}) {
-  return async (req, res, next) => {
-    try {
-      const result = await stRequest(stUrl, {
-        method: req.method,
-        query: req.query,
-        body: req.body,
-      });
-
-      return res.status(result.status).json(result.data);
-    } catch (error) {
-      next(error);
-    }
-  };
-}
-
-/**
- * Helper for GET requests
- */
-export async function stGet(url, query = {}) {
-  return stRequest(url, { method: 'GET', query });
-}
-
-/**
- * Helper for POST requests
- */
-export async function stPost(url, body = {}, query = {}) {
-  return stRequest(url, { method: 'POST', body, query });
-}
-
-/**
- * Helper for PUT requests
- */
-export async function stPut(url, body = {}, query = {}) {
-  return stRequest(url, { method: 'PUT', body, query });
-}
-
-/**
- * Helper for PATCH requests
- */
-export async function stPatch(url, body = {}, query = {}) {
-  return stRequest(url, { method: 'PATCH', body, query });
-}
-
-/**
- * Helper for DELETE requests
- */
-export async function stDelete(url, query = {}) {
-  return stRequest(url, { method: 'DELETE', query });
-}
-
-export default {
-  stRequest,
-  stGet,
-  stPost,
-  stPut,
-  stPatch,
-  stDelete,
-  createProxyHandler,
-};
+export default { stRequest };

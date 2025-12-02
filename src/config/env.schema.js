@@ -29,6 +29,9 @@ export const envSchema = z.object({
   // Optional: Retry configuration
   MAX_RETRIES: z.string().default('3').transform(Number),
   RETRY_DELAY_MS: z.string().default('1000').transform(Number),
+
+  // Optional: Log level
+  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).optional(),
 });
 
 export function validateEnv() {
