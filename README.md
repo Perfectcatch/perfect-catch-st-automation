@@ -5,10 +5,11 @@ Production-grade ServiceTitan API proxy server for Perfect Catch Electric & Pool
 **Version:** 2.0.0  
 **Total Endpoints:** 372+  
 **Total Modules:** 19  
-**Last Updated:** December 4, 2025
+**Last Updated:** December 7, 2025
 
 ## Features
 
+### Core API Features
 - **OAuth Token Management**: Automatic token acquisition, caching, and refresh
 - **Full HTTP Verb Support**: GET, POST, PUT, DELETE, PATCH
 - **Retry Logic**: Automatic retry for 429 (rate limit) and 5xx errors
@@ -18,6 +19,23 @@ Production-grade ServiceTitan API proxy server for Perfect Catch Electric & Pool
 - **API Key Protection**: Optional authentication for internal endpoints
 - **Health Checks**: `/ping`, `/health`, and `/status` endpoints
 - **Comprehensive ServiceTitan Coverage**: 19 modules with 372+ endpoints
+
+### 🆕 Pricebook Sync Engine
+- **Bi-directional Sync**: Sync pricebook data between ServiceTitan and local PostgreSQL
+- **Local Database**: 6,000+ items (categories, materials, services, equipment)
+- **Automated Scheduling**: Daily full sync + 6-hour incremental syncs
+- **Conflict Detection**: Track and resolve sync conflicts
+
+### 🆕 AI-Powered Chat Agent
+- **Natural Language Queries**: Search pricebook with plain English
+- **OpenAI GPT-4 Integration**: Intelligent intent classification
+- **Job-Based Estimates**: Build estimates conversationally
+- **Session Context**: Maintains conversation state
+
+### 🆕 n8n Webhook Integration
+- **Event Subscriptions**: Subscribe to pricebook events
+- **Webhook Delivery**: Automatic event notifications
+- **12 Event Types**: material_created, sync_completed, etc.
 
 ## Quick Start
 
@@ -81,6 +99,11 @@ npm run smoke
 | `API_KEY` | No | - | Optional API key for authentication |
 | `RATE_LIMIT_MAX_REQUESTS` | No | 100 | Max requests per window (0 to disable) |
 | `MAX_RETRIES` | No | 3 | Retry attempts for failed requests |
+| `DATABASE_URL` | No | - | PostgreSQL connection string (for pricebook sync) |
+| `OPENAI_API_KEY` | No | - | OpenAI API key (for chat agent) |
+| `SYNC_SCHEDULER_ENABLED` | No | true | Enable automatic sync scheduling |
+| `SYNC_FULL_CRON` | No | 0 2 * * * | Full sync cron schedule |
+| `SYNC_INCREMENTAL_CRON` | No | 0 */6 * * * | Incremental sync cron schedule |
 
 ## Project Structure
 
@@ -95,29 +118,40 @@ perfect-catch-st-automation/
 │   ├── routes/
 │   │   ├── index.js              # Route aggregator
 │   │   ├── health.routes.js      # Health endpoints
-│   │   ├── jobs.routes.js        # Jobs endpoints
-│   │   ├── customers.routes.js   # Customer endpoints
-│   │   ├── estimates.routes.js   # Estimate endpoints
-│   │   └── opportunities.routes.js
+│   │   ├── pricebook-chat.routes.js  # Chat agent routes
+│   │   └── ...                   # Other route files
 │   ├── controllers/              # Business logic
 │   ├── services/
 │   │   ├── stClient.js           # ServiceTitan API client
 │   │   └── tokenManager.js       # OAuth token management
-│   ├── middleware/
-│   │   ├── requestLogger.js      # Request logging
-│   │   ├── errorHandler.js       # Error handling
-│   │   └── apiKeyAuth.js         # API key auth
-│   └── lib/
-│       ├── logger.js             # Pino logger
-│       ├── errors.js             # Custom errors
-│       └── stEndpoints.js        # URL builders
-├── tests/                        # Test files
+│   ├── middleware/               # Express middleware
+│   ├── lib/                      # Utilities
+│   ├── sync/
+│   │   └── pricebook/
+│   │       ├── pricebook-sync.engine.js  # Sync engine
+│   │       ├── sync-scheduler.js         # Cron scheduler
+│   │       └── sync.controller.js        # Sync API
+│   ├── chat/
+│   │   ├── pricebook-chat.agent.js       # Chat agent
+│   │   ├── intent-classifier.js          # Intent classification
+│   │   ├── entity-extractor.js           # Entity extraction
+│   │   └── context-manager.js            # Session management
+│   ├── integrations/
+│   │   └── n8n/
+│   │       ├── webhook-handler.js        # Webhook processing
+│   │       └── n8n.controller.js         # n8n API
+│   └── db/
+│       ├── prisma.js                     # Prisma client
+│       └── migrations/                   # SQL migrations
+├── prisma/
+│   └── schema.prisma             # Database schema
 ├── scripts/
-│   └── smoke-test.js             # Endpoint tester
-├── docs/
-│   └── openapi.yaml              # API documentation
-├── api-server.js                 # Legacy server (preserved)
-└── package.json
+│   └── populate-pricebook-db.js  # Database population
+├── openwebui/
+│   └── pricebook_tool.py         # Open WebUI integration
+├── tests/                        # Test files
+├── docs/                         # Documentation
+└── docker-compose.pricebook.yml  # Full stack deployment
 ```
 
 ## API Endpoints
@@ -403,6 +437,63 @@ perfect-catch-st-automation/
 |--------|----------|-------------|
 | GET | `/jbce/call-reasons` | List call reasons |
 
+---
+
+### Pricebook Sync Engine (`/api/sync/pricebook`)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/sync/pricebook/status` | Get sync status, stats, and scheduler info |
+| GET | `/api/sync/pricebook/logs` | Get sync history logs |
+| GET | `/api/sync/pricebook/conflicts` | Get unresolved sync conflicts |
+| POST | `/api/sync/pricebook/full` | Trigger full sync |
+| POST | `/api/sync/pricebook/incremental` | Trigger incremental sync |
+| POST | `/api/sync/pricebook/conflicts/:id/resolve` | Resolve a conflict |
+
+---
+
+### AI Chat Agent (`/chat/pricebook`)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/chat/pricebook` | Send message to chat agent |
+| GET | `/chat/pricebook/health` | Chat agent health status |
+
+**Chat Request Body:**
+```json
+{
+  "sessionId": "unique-session-id",
+  "message": "search for transformer"
+}
+```
+
+**Supported Intents:**
+- Browse & Search: "show me pool materials", "search transformer"
+- Create Items: "create a material called Test Part"
+- Update Items: "update price of EMT to $5.99"
+- **Job Estimates**: "start estimate for job 12345", "add chlorinator hookup", "show estimate", "create estimate"
+
+---
+
+### n8n Webhook Integration (`/api/n8n`)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/n8n/events` | List available webhook events |
+| POST | `/api/n8n/subscribe` | Subscribe to events |
+| GET | `/api/n8n/subscriptions` | List active subscriptions |
+| DELETE | `/api/n8n/subscriptions/:id` | Unsubscribe |
+| POST | `/api/n8n/webhook` | Receive/process n8n webhooks |
+
+**Available Events:**
+- `material_created`, `material_updated`, `material_deleted`
+- `service_created`, `service_updated`, `service_deleted`
+- `category_created`
+- `sync_started`, `sync_completed`, `sync_failed`
+- `conflict_detected`, `conflict_resolved`
+
+---
+
 ## Example Usage
 
 ### cURL Examples
@@ -459,6 +550,58 @@ node scripts/get-recent-customers.js http://localhost:3001 30
 }
 ```
 
+### Chat Agent Examples
+
+```bash
+# Start an estimate for a job
+curl -X POST http://localhost:3001/chat/pricebook \
+  -H "Content-Type: application/json" \
+  -d '{"sessionId": "my-session", "message": "Start estimate for job 12345"}'
+
+# Add items to estimate
+curl -X POST http://localhost:3001/chat/pricebook \
+  -H "Content-Type: application/json" \
+  -d '{"sessionId": "my-session", "message": "Add chlorinator hookup and transformer"}'
+
+# Show current estimate
+curl -X POST http://localhost:3001/chat/pricebook \
+  -H "Content-Type: application/json" \
+  -d '{"sessionId": "my-session", "message": "Show estimate"}'
+
+# Search pricebook
+curl -X POST http://localhost:3001/chat/pricebook \
+  -H "Content-Type: application/json" \
+  -d '{"sessionId": "my-session", "message": "Search for pool pump"}'
+```
+
+### Pricebook Sync Examples
+
+```bash
+# Get sync status
+curl http://localhost:3001/api/sync/pricebook/status
+
+# Trigger full sync
+curl -X POST http://localhost:3001/api/sync/pricebook/full
+
+# Get sync logs
+curl http://localhost:3001/api/sync/pricebook/logs
+```
+
+### n8n Webhook Examples
+
+```bash
+# List available events
+curl http://localhost:3001/api/n8n/events
+
+# Subscribe to events
+curl -X POST http://localhost:3001/api/n8n/subscribe \
+  -H "Content-Type: application/json" \
+  -d '{"webhookUrl": "http://n8n:5678/webhook/test", "events": ["material_created", "sync_completed"]}'
+
+# List subscriptions
+curl http://localhost:3001/api/n8n/subscriptions
+```
+
 ## Deployment
 
 ### Using PM2
@@ -494,8 +637,45 @@ docker run -d \
 ### Using Docker Compose
 
 ```bash
+# Basic deployment
 docker-compose up -d
+
+# Full stack with PostgreSQL (for pricebook sync)
+docker-compose -f docker-compose.pricebook.yml up -d
 ```
+
+### Full Stack Deployment (Pricebook Engine)
+
+The pricebook engine requires PostgreSQL. Use the full stack deployment:
+
+```bash
+# Start all services
+docker-compose -f docker-compose.pricebook.yml up -d
+
+# Connect to pricebook network
+docker network connect pricebook-net perfect-catch-st-automation
+
+# Populate database from ServiceTitan
+docker exec perfect-catch-st-automation node scripts/populate-pricebook-db.js
+```
+
+**Services included:**
+- `st-automation` - Main API server (port 3001)
+- `pricebook-postgres` - PostgreSQL database (port 5432)
+- `redis` - Redis cache (port 6379)
+
+## Open WebUI Integration
+
+A ready-to-use tool for Open WebUI is available at `openwebui/pricebook_tool.py`.
+
+1. Go to Open WebUI → Workspace → Tools
+2. Create new tool and paste the contents of `pricebook_tool.py`
+3. Enable the tool in your chat
+
+**Available functions:**
+- `search_pricebook(query)` - Natural language search
+- `get_pricebook_categories()` - List all categories
+- `get_pricebook_status()` - Database statistics
 
 ## Error Response Format
 

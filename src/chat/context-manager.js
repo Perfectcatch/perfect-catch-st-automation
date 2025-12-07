@@ -235,6 +235,14 @@ export class ContextManager {
       history: [],
       pendingAction: null,
       lastCategory: null,
+      // Job/Estimate context
+      currentJob: null,        // { jobId, jobName, customerId }
+      currentEstimate: {       // Running estimate
+        items: [],             // [{ id, type, name, code, price, quantity }]
+        total: 0,
+        createdAt: null,
+      },
+      awaitingConfirmation: null, // 'create_estimate' | null
       userId: null,
       userName: null,
       createdAt: new Date().toISOString(),

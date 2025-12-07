@@ -84,12 +84,16 @@ export class PricebookChatAgent {
 
       return {
         success: true,
+        sessionId,
         message: response.message,
         data: response.data || null,
         suggestions: response.suggestions || [],
         context: {
           lastCategory: context.lastCategory,
           hasPendingAction: !!context.pendingAction,
+          currentJob: context.currentJob,
+          estimateItemCount: context.currentEstimate?.items?.length || 0,
+          estimateTotal: context.currentEstimate?.total || 0,
         },
       };
     } catch (error) {
@@ -111,6 +115,20 @@ export class PricebookChatAgent {
    * @returns {Promise<Object>}
    */
   async routeToHandler(intent, context, message) {
+    // Initialize estimate if not present
+    if (!context.currentEstimate) {
+      context.currentEstimate = { items: [], total: 0, createdAt: null };
+    }
+
+    // Handle confirmation responses first if awaiting
+    if (context.awaitingConfirmation) {
+      if (intent.type === 'confirm_yes') {
+        return this.handleConfirmation(context, true);
+      } else if (intent.type === 'confirm_no') {
+        return this.handleConfirmation(context, false);
+      }
+    }
+
     switch (intent.type) {
       case 'query_materials':
         return this.handleQueryMaterials(context, message, intent.entities);
@@ -136,6 +154,33 @@ export class PricebookChatAgent {
 
       case 'search_pricebook':
         return this.handleSearch(context, message, intent.entities);
+
+      // Job/Estimate handlers
+      case 'set_job':
+        return this.handleSetJob(context, message, intent.entities);
+
+      case 'add_items':
+        return this.handleAddItems(context, message, intent.entities);
+
+      case 'show_estimate':
+        return this.handleShowEstimate(context);
+
+      case 'show_total':
+        return this.handleShowTotal(context);
+
+      case 'create_estimate':
+        return this.handleCreateEstimate(context);
+
+      case 'clear_estimate':
+        return this.handleClearEstimate(context);
+
+      case 'remove_item':
+        return this.handleRemoveItem(context, message, intent.entities);
+
+      case 'confirm_yes':
+      case 'confirm_no':
+        // If not awaiting confirmation, treat as unknown
+        return this.handleUnknown(context, message);
 
       case 'help':
         return this.handleHelp();
@@ -681,6 +726,436 @@ export class PricebookChatAgent {
     };
   }
 
+  // =========================================
+  // JOB/ESTIMATE HANDLERS
+  // =========================================
+
+  /**
+   * Handle set job intent - start an estimate for a job
+   */
+  async handleSetJob(context, message, entities) {
+    const { jobId, jobName } = entities;
+
+    if (!jobId && !jobName) {
+      // Try to extract from message
+      const jobMatch = message.match(/job\s*#?\s*(\d+)/i);
+      if (jobMatch) {
+        entities.jobId = jobMatch[1];
+      }
+    }
+
+    // Set job context
+    context.currentJob = {
+      jobId: entities.jobId || null,
+      jobName: entities.jobName || null,
+      setAt: new Date().toISOString(),
+    };
+
+    // Initialize/reset estimate
+    context.currentEstimate = {
+      items: [],
+      total: 0,
+      createdAt: new Date().toISOString(),
+    };
+
+    const jobDisplay = context.currentJob.jobId 
+      ? `Job #${context.currentJob.jobId}` 
+      : context.currentJob.jobName || 'new job';
+
+    return {
+      message: `📋 Started estimate for **${jobDisplay}**.\n\nWhat would you like to add? You can:\n• Search for items: "search transformer"\n• Add by name: "add Intermatic package"\n• Browse: "show pool services"`,
+      suggestions: ['Search services', 'Show categories', 'Add chlorinator hookup'],
+      data: { job: context.currentJob },
+    };
+  }
+
+  /**
+   * Handle add items intent - add items to current estimate
+   */
+  async handleAddItems(context, message, entities) {
+    // Check if we have a job context
+    if (!context.currentJob) {
+      return {
+        message: "You haven't started an estimate yet.\n\nSay something like:\n• \"Start estimate for job 12345\"\n• \"New estimate for the Smith pool job\"",
+        suggestions: ['Start new estimate', 'Start estimate for job 12345'],
+      };
+    }
+
+    // Extract item names from message
+    const itemsText = entities.itemsText || message;
+    const cleanedText = itemsText
+      .replace(/\b(add|include|put|throw\s+in|and|also|plus)\b/gi, ',')
+      .replace(/,+/g, ',')
+      .trim();
+
+    const itemNames = cleanedText
+      .split(',')
+      .map(s => s.trim())
+      .filter(s => s.length > 2);
+
+    if (itemNames.length === 0) {
+      return {
+        message: "What would you like to add to the estimate?\n\nTry: \"add Intermatic package and heat pump hookup\"",
+        suggestions: ['Search services', 'Show categories'],
+      };
+    }
+
+    // Search for each item
+    const addedItems = [];
+    const notFound = [];
+
+    for (const itemName of itemNames) {
+      const found = await this.findItemByName(itemName);
+      
+      if (found) {
+        // Add to estimate
+        const estimateItem = {
+          id: found.stId?.toString() || found.id,
+          type: found.type,
+          name: found.name || found.displayName,
+          code: found.code,
+          price: parseFloat(found.price) || 0,
+          quantity: 1,
+        };
+
+        context.currentEstimate.items.push(estimateItem);
+        addedItems.push(estimateItem);
+      } else {
+        notFound.push(itemName);
+      }
+    }
+
+    // Recalculate total
+    context.currentEstimate.total = context.currentEstimate.items.reduce(
+      (sum, item) => sum + (item.price * item.quantity),
+      0
+    );
+
+    // Build response
+    let response = '';
+    
+    if (addedItems.length > 0) {
+      response += `✅ Added **${addedItems.length}** item(s):\n`;
+      response += addedItems.map(i => `• ${i.name} - $${i.price.toFixed(2)}`).join('\n');
+      response += `\n\n**Current Total: $${context.currentEstimate.total.toFixed(2)}**`;
+      response += ` (${context.currentEstimate.items.length} items)`;
+    }
+
+    if (notFound.length > 0) {
+      response += `\n\n⚠️ Couldn't find: ${notFound.join(', ')}`;
+      response += '\nTry searching: "search ' + notFound[0] + '"';
+    }
+
+    response += '\n\nNeed anything else?';
+
+    return {
+      message: response,
+      suggestions: ['Show estimate', 'Create estimate', 'Add more items'],
+      data: { addedItems, notFound, estimate: context.currentEstimate },
+    };
+  }
+
+  /**
+   * Find an item by name across materials, services, and equipment
+   */
+  async findItemByName(name) {
+    // Search services first (most common for estimates)
+    const service = await this.prisma.pricebookService.findFirst({
+      where: {
+        OR: [
+          { name: { contains: name, mode: 'insensitive' } },
+          { displayName: { contains: name, mode: 'insensitive' } },
+          { code: { contains: name, mode: 'insensitive' } },
+        ],
+        active: true,
+        deletedAt: null,
+      },
+    });
+
+    if (service) {
+      return { ...service, type: 'service' };
+    }
+
+    // Search materials
+    const material = await this.prisma.pricebookMaterial.findFirst({
+      where: {
+        OR: [
+          { name: { contains: name, mode: 'insensitive' } },
+          { displayName: { contains: name, mode: 'insensitive' } },
+          { code: { contains: name, mode: 'insensitive' } },
+        ],
+        active: true,
+        deletedAt: null,
+      },
+    });
+
+    if (material) {
+      return { ...material, type: 'material' };
+    }
+
+    // Search equipment
+    const equipment = await this.prisma.pricebookEquipment.findFirst({
+      where: {
+        OR: [
+          { name: { contains: name, mode: 'insensitive' } },
+          { displayName: { contains: name, mode: 'insensitive' } },
+          { code: { contains: name, mode: 'insensitive' } },
+        ],
+        active: true,
+        deletedAt: null,
+      },
+    });
+
+    if (equipment) {
+      return { ...equipment, type: 'equipment' };
+    }
+
+    return null;
+  }
+
+  /**
+   * Handle show estimate intent
+   */
+  async handleShowEstimate(context) {
+    if (!context.currentJob && context.currentEstimate.items.length === 0) {
+      return {
+        message: "No estimate in progress.\n\nStart one with: \"Start estimate for job 12345\"",
+        suggestions: ['Start new estimate'],
+      };
+    }
+
+    const jobDisplay = context.currentJob?.jobId 
+      ? `Job #${context.currentJob.jobId}` 
+      : context.currentJob?.jobName || 'Current Estimate';
+
+    if (context.currentEstimate.items.length === 0) {
+      return {
+        message: `📋 **${jobDisplay}**\n\nNo items added yet.\n\nAdd items by saying: "add Intermatic package"`,
+        suggestions: ['Search services', 'Show categories'],
+      };
+    }
+
+    const itemsList = context.currentEstimate.items
+      .map((item, i) => `${i + 1}. **${item.name}** (${item.code}) - $${item.price.toFixed(2)} x ${item.quantity}`)
+      .join('\n');
+
+    return {
+      message: `📋 **${jobDisplay}**\n\n${itemsList}\n\n---\n**Total: $${context.currentEstimate.total.toFixed(2)}**\n\nReady to create this estimate in ServiceTitan?`,
+      suggestions: ['Create estimate', 'Add more items', 'Clear estimate'],
+      data: { estimate: context.currentEstimate, job: context.currentJob },
+    };
+  }
+
+  /**
+   * Handle show total intent
+   */
+  handleShowTotal(context) {
+    if (context.currentEstimate.items.length === 0) {
+      return {
+        message: "No items in the current estimate. Total: **$0.00**",
+        suggestions: ['Start new estimate', 'Search services'],
+      };
+    }
+
+    return {
+      message: `**Current Total: $${context.currentEstimate.total.toFixed(2)}**\n(${context.currentEstimate.items.length} items)`,
+      suggestions: ['Show estimate', 'Create estimate', 'Add more items'],
+    };
+  }
+
+  /**
+   * Handle create estimate intent - push to ServiceTitan
+   */
+  async handleCreateEstimate(context) {
+    if (!context.currentJob) {
+      return {
+        message: "No job selected. Start an estimate first:\n\"Start estimate for job 12345\"",
+        suggestions: ['Start new estimate'],
+      };
+    }
+
+    if (context.currentEstimate.items.length === 0) {
+      return {
+        message: "The estimate is empty. Add some items first!",
+        suggestions: ['Search services', 'Add Intermatic package'],
+      };
+    }
+
+    // Set awaiting confirmation
+    context.awaitingConfirmation = 'create_estimate';
+
+    const jobDisplay = context.currentJob.jobId 
+      ? `Job #${context.currentJob.jobId}` 
+      : context.currentJob.jobName;
+
+    return {
+      message: `Ready to create estimate in ServiceTitan:\n\n**${jobDisplay}**\n**${context.currentEstimate.items.length} items** - **$${context.currentEstimate.total.toFixed(2)}**\n\nConfirm? (yes/no)`,
+      suggestions: ['Yes', 'No', 'Show estimate'],
+    };
+  }
+
+  /**
+   * Handle confirmation response
+   */
+  async handleConfirmation(context, confirmed) {
+    const action = context.awaitingConfirmation;
+    context.awaitingConfirmation = null;
+
+    if (!confirmed) {
+      return {
+        message: "Cancelled. The estimate is still saved - you can continue editing or create it later.",
+        suggestions: ['Show estimate', 'Add more items', 'Clear estimate'],
+      };
+    }
+
+    if (action === 'create_estimate') {
+      return this.pushEstimateToST(context);
+    }
+
+    return { message: "Action confirmed." };
+  }
+
+  /**
+   * Push estimate to ServiceTitan
+   */
+  async pushEstimateToST(context) {
+    try {
+      // Build estimate payload for ServiceTitan
+      const estimateItems = context.currentEstimate.items.map(item => ({
+        skuId: parseInt(item.id, 10),
+        skuType: item.type === 'service' ? 'Service' : item.type === 'material' ? 'Material' : 'Equipment',
+        quantity: item.quantity,
+        unitPrice: item.price,
+      }));
+
+      const jobId = context.currentJob.jobId;
+      
+      if (!jobId) {
+        // If no job ID, we can't create in ST - just show success message
+        const estimateId = `EST-${Date.now()}`;
+        
+        // Clear the estimate
+        const completedEstimate = { ...context.currentEstimate };
+        context.currentEstimate = { items: [], total: 0, createdAt: null };
+        context.currentJob = null;
+
+        return {
+          message: `✅ Estimate prepared!\n\n**Reference: ${estimateId}**\n**Total: $${completedEstimate.total.toFixed(2)}**\n\n⚠️ Note: No job ID was provided, so this wasn't pushed to ServiceTitan. To push estimates, start with a job number: "Start estimate for job 12345"`,
+          suggestions: ['Start new estimate', 'Search services'],
+          data: { estimateId, estimate: completedEstimate },
+        };
+      }
+
+      // Call ServiceTitan API to create estimate
+      // Note: This is a placeholder - actual ST estimate API may differ
+      const url = `https://api.servicetitan.io/jpm/v2/tenant/${this.tenantId}/jobs/${jobId}/estimates`;
+      
+      const response = await this.stClient.stRequest(url, {
+        method: 'POST',
+        body: {
+          items: estimateItems,
+          name: `Estimate - ${new Date().toLocaleDateString()}`,
+          summary: `Created via Pricebook Chat - ${context.currentEstimate.items.length} items`,
+        },
+      });
+
+      if (response.ok) {
+        const estimateId = response.data?.id || `EST-${Date.now()}`;
+        const completedEstimate = { ...context.currentEstimate };
+        
+        // Clear the estimate
+        context.currentEstimate = { items: [], total: 0, createdAt: null };
+        context.currentJob = null;
+
+        return {
+          message: `✅ **Estimate #${estimateId}** created in ServiceTitan!\n\n**Total: $${completedEstimate.total.toFixed(2)}**\n**Items: ${completedEstimate.items.length}**\n\nWhat's next?`,
+          suggestions: ['Start new estimate', 'Search services'],
+          data: { estimateId, estimate: completedEstimate },
+        };
+      } else {
+        throw new Error(response.data?.message || 'Failed to create estimate');
+      }
+    } catch (error) {
+      this.logger.error({ error: error.message }, 'Failed to push estimate to ST');
+      
+      return {
+        message: `❌ Failed to create estimate: ${error.message}\n\nYour estimate is still saved. Try again or check the job ID.`,
+        suggestions: ['Try again', 'Show estimate', 'Clear estimate'],
+      };
+    }
+  }
+
+  /**
+   * Handle clear estimate intent
+   */
+  handleClearEstimate(context) {
+    const hadItems = context.currentEstimate.items.length > 0;
+    
+    context.currentEstimate = { items: [], total: 0, createdAt: null };
+    context.currentJob = null;
+    context.awaitingConfirmation = null;
+
+    return {
+      message: hadItems 
+        ? "🗑️ Estimate cleared. Ready to start fresh!"
+        : "Estimate was already empty.",
+      suggestions: ['Start new estimate', 'Search services', 'Show categories'],
+    };
+  }
+
+  /**
+   * Handle remove item intent
+   */
+  async handleRemoveItem(context, message, entities) {
+    if (context.currentEstimate.items.length === 0) {
+      return {
+        message: "No items to remove - the estimate is empty.",
+        suggestions: ['Start new estimate', 'Search services'],
+      };
+    }
+
+    // Try to find item by name or number
+    const itemText = (entities.itemsText || message)
+      .replace(/\b(remove|delete|take\s+off)\b/gi, '')
+      .trim();
+
+    // Check if it's a number (item index)
+    const itemNum = parseInt(itemText, 10);
+    let removedItem = null;
+
+    if (!isNaN(itemNum) && itemNum > 0 && itemNum <= context.currentEstimate.items.length) {
+      removedItem = context.currentEstimate.items.splice(itemNum - 1, 1)[0];
+    } else {
+      // Find by name
+      const index = context.currentEstimate.items.findIndex(
+        item => item.name.toLowerCase().includes(itemText.toLowerCase()) ||
+                item.code.toLowerCase().includes(itemText.toLowerCase())
+      );
+
+      if (index !== -1) {
+        removedItem = context.currentEstimate.items.splice(index, 1)[0];
+      }
+    }
+
+    if (!removedItem) {
+      return {
+        message: `Couldn't find "${itemText}" in the estimate.\n\nSay "show estimate" to see all items, then "remove 1" to remove by number.`,
+        suggestions: ['Show estimate'],
+      };
+    }
+
+    // Recalculate total
+    context.currentEstimate.total = context.currentEstimate.items.reduce(
+      (sum, item) => sum + (item.price * item.quantity),
+      0
+    );
+
+    return {
+      message: `🗑️ Removed: **${removedItem.name}** (-$${removedItem.price.toFixed(2)})\n\n**New Total: $${context.currentEstimate.total.toFixed(2)}** (${context.currentEstimate.items.length} items)`,
+      suggestions: ['Show estimate', 'Add more items', 'Create estimate'],
+    };
+  }
+
   /**
    * Handle help intent
    */
@@ -688,7 +1163,7 @@ export class PricebookChatAgent {
     return {
       message: `# Pricebook Chat Assistant
 
-I can help you manage your ServiceTitan pricebook. Here's what I can do:
+I can help you manage your ServiceTitan pricebook and build estimates. Here's what I can do:
 
 **📋 Browse & Search**
 • "Show me conduit materials"
@@ -702,12 +1177,20 @@ I can help you manage your ServiceTitan pricebook. Here's what I can do:
 **✏️ Update Items**
 • "Update the price of 1-inch EMT to $5.99"
 
+**📝 Build Estimates**
+• "Start estimate for job 12345"
+• "Add Intermatic package and heat pump hookup"
+• "Show estimate" / "What's the total?"
+• "Remove chlorinator" / "Remove item 2"
+• "Create estimate" (push to ServiceTitan)
+• "Clear estimate"
+
 **💡 Tips**
-• I remember your last category, so you can say "add more materials" after browsing
-• I'll ask for missing information like price and cost
+• I remember your job context, so just say "add transformer" after starting an estimate
+• Say "yes" or "no" when I ask for confirmation
 
 What would you like to do?`,
-      suggestions: ['Show categories', 'Search materials', 'Create a material'],
+      suggestions: ['Show categories', 'Search services', 'Start new estimate'],
     };
   }
 

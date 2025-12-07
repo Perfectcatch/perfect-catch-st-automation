@@ -87,7 +87,7 @@ export class PricebookSyncEngine {
     const startTime = Date.now();
     const {
       direction = 'from_st',
-      entityTypes = ['categories', 'materials', 'services', 'equipment'],
+      entityTypes = ['category', 'material', 'service', 'equipment'],
       fullSync = false,
       resolveConflicts = 'manual',
       dryRun = false,
@@ -127,8 +127,8 @@ export class PricebookSyncEngine {
 
     try {
       // Sync in order (categories first due to foreign keys)
-      if (entityTypes.includes('categories')) {
-        const categoryResult = await this.syncEntity('categories', {
+      if (entityTypes.includes('category')) {
+        const categoryResult = await this.syncEntity('category', {
           direction,
           fullSync,
           resolveConflicts,
@@ -138,8 +138,8 @@ export class PricebookSyncEngine {
         this.mergeResults(result, categoryResult);
       }
 
-      if (entityTypes.includes('materials')) {
-        const materialResult = await this.syncEntity('materials', {
+      if (entityTypes.includes('material')) {
+        const materialResult = await this.syncEntity('material', {
           direction,
           fullSync,
           resolveConflicts,
@@ -149,8 +149,8 @@ export class PricebookSyncEngine {
         this.mergeResults(result, materialResult);
       }
 
-      if (entityTypes.includes('services')) {
-        const serviceResult = await this.syncEntity('services', {
+      if (entityTypes.includes('service')) {
+        const serviceResult = await this.syncEntity('service', {
           direction,
           fullSync,
           resolveConflicts,

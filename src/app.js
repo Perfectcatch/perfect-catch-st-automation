@@ -12,6 +12,11 @@ import { createLogger } from './lib/logger.js';
 
 const logger = createLogger('app');
 
+// Handle BigInt serialization for JSON responses
+BigInt.prototype.toJSON = function() {
+  return this.toString();
+};
+
 // Create Express app
 const app = express();
 

@@ -21,6 +21,16 @@ const INTENTS = {
   UPDATE_SERVICE: 'update_service',
   DELETE_MATERIAL: 'delete_material',
   SEARCH_PRICEBOOK: 'search_pricebook',
+  // Job/Estimate intents
+  SET_JOB: 'set_job',
+  ADD_ITEMS: 'add_items',
+  SHOW_ESTIMATE: 'show_estimate',
+  SHOW_TOTAL: 'show_total',
+  CREATE_ESTIMATE: 'create_estimate',
+  CLEAR_ESTIMATE: 'clear_estimate',
+  REMOVE_ITEM: 'remove_item',
+  CONFIRM_YES: 'confirm_yes',
+  CONFIRM_NO: 'confirm_no',
   HELP: 'help',
   UNKNOWN: 'unknown',
 };
@@ -122,6 +132,58 @@ export class IntentClassifier {
       return { type: INTENTS.SEARCH_PRICEBOOK, confidence: 0.9, entities: { searchTerm } };
     }
 
+    // Job/Estimate intents
+    // Set job context
+    if (/\b(start|begin|new|for)\b.*\b(estimate|job|quote)\b/i.test(lowerMessage) ||
+        /\bjob\s*#?\s*\d+/i.test(lowerMessage) ||
+        /\bfor\s+(the\s+)?\w+.*\bjob\b/i.test(lowerMessage)) {
+      const jobInfo = this.extractJobInfo(lowerMessage);
+      return { type: INTENTS.SET_JOB, confidence: 0.95, entities: jobInfo };
+    }
+
+    // Add items to estimate
+    if (/\b(add|include|put|throw\s+in)\b/i.test(lowerMessage) && 
+        !/\b(material|service|category)\b/i.test(lowerMessage)) {
+      return { type: INTENTS.ADD_ITEMS, confidence: 0.9, entities: { itemsText: lowerMessage } };
+    }
+
+    // Show current estimate
+    if (/\b(show|view|see|what'?s)\b.*\b(estimate|quote|current|so\s+far)\b/i.test(lowerMessage) ||
+        /\bcurrent\s+(estimate|total|items)\b/i.test(lowerMessage)) {
+      return { type: INTENTS.SHOW_ESTIMATE, confidence: 0.95, entities: {} };
+    }
+
+    // Show total
+    if (/\b(total|sum|how\s+much|price|cost)\b/i.test(lowerMessage) &&
+        /\b(so\s+far|current|estimate|is\s+it)\b/i.test(lowerMessage)) {
+      return { type: INTENTS.SHOW_TOTAL, confidence: 0.95, entities: {} };
+    }
+
+    // Create/push estimate to ServiceTitan
+    if (/\b(create|push|submit|send|finalize)\b.*\b(estimate|quote)\b/i.test(lowerMessage) ||
+        /\bpush\s+to\s+(st|servicetitan)\b/i.test(lowerMessage)) {
+      return { type: INTENTS.CREATE_ESTIMATE, confidence: 0.95, entities: {} };
+    }
+
+    // Clear estimate
+    if (/\b(clear|reset|start\s+over|cancel)\b.*\b(estimate|quote|items)\b/i.test(lowerMessage)) {
+      return { type: INTENTS.CLEAR_ESTIMATE, confidence: 0.95, entities: {} };
+    }
+
+    // Remove item from estimate
+    if (/\b(remove|delete|take\s+off)\b/i.test(lowerMessage)) {
+      return { type: INTENTS.REMOVE_ITEM, confidence: 0.9, entities: { itemsText: lowerMessage } };
+    }
+
+    // Confirmation responses
+    if (/^(yes|yeah|yep|sure|ok|okay|do\s+it|confirm|go\s+ahead|create\s+it)$/i.test(lowerMessage)) {
+      return { type: INTENTS.CONFIRM_YES, confidence: 0.95, entities: {} };
+    }
+
+    if (/^(no|nope|nah|cancel|never\s*mind|not\s+yet)$/i.test(lowerMessage)) {
+      return { type: INTENTS.CONFIRM_NO, confidence: 0.95, entities: {} };
+    }
+
     // Default to unknown with low confidence
     return { type: INTENTS.UNKNOWN, confidence: 0.3, entities: {} };
   }
@@ -133,7 +195,7 @@ export class IntentClassifier {
    * @returns {Promise<Object>}
    */
   async classifyWithGPT(message, context) {
-    const systemPrompt = `You are an intent classifier for a pricebook management system.
+    const systemPrompt = `You are an intent classifier for a pricebook management system with job estimate building.
 
 Classify the user's intent into ONE of these categories:
 - query_materials: User wants to see/list materials (e.g., "show me conduit materials")
@@ -145,6 +207,15 @@ Classify the user's intent into ONE of these categories:
 - create_service: User wants to create a service
 - update_material: User wants to modify an existing material
 - search_pricebook: User wants to search for something
+- set_job: User wants to start an estimate for a job (e.g., "start estimate for job 12345", "for the Smith pool job")
+- add_items: User wants to add items to current estimate (e.g., "add intermatic package", "include heat pump hookup")
+- show_estimate: User wants to see current estimate items
+- show_total: User wants to see the current total
+- create_estimate: User wants to push/create estimate in ServiceTitan (e.g., "create the estimate", "push to ST")
+- clear_estimate: User wants to clear/reset the current estimate
+- remove_item: User wants to remove an item from estimate
+- confirm_yes: User confirms an action (e.g., "yes", "ok", "do it")
+- confirm_no: User declines an action (e.g., "no", "cancel")
 - help: User wants help or instructions
 - unknown: Cannot determine intent
 
@@ -152,8 +223,12 @@ Also extract any entities mentioned:
 - category: Category name if mentioned
 - materialName: Material name if mentioned
 - searchTerm: Search term if searching
+- jobId: Job number if mentioned (e.g., "12345" from "job 12345")
+- jobName: Job name if mentioned (e.g., "Smith pool" from "the Smith pool job")
+- itemNames: Array of item names to add
 
 ${context.lastCategory ? `Context: User was last looking at "${context.lastCategory.name}" category.` : ''}
+${context.currentJob ? `Context: User is building an estimate for Job #${context.currentJob.jobId || context.currentJob.jobName}.` : ''}
 
 Respond with JSON only:
 {"intent": "query_materials", "confidence": 0.95, "entities": {"category": "conduit"}}`;
@@ -181,6 +256,38 @@ Respond with JSON only:
       this.logger.error({ content }, 'Failed to parse GPT response');
       return { type: INTENTS.UNKNOWN, confidence: 0.3, entities: {} };
     }
+  }
+
+  /**
+   * Extract job information from message
+   * @param {string} message
+   * @returns {Object}
+   */
+  extractJobInfo(message) {
+    const info = { jobId: null, jobName: null };
+
+    // Extract job number: "job 12345", "job #12345", "job#12345"
+    const jobIdMatch = message.match(/\bjob\s*#?\s*(\d+)/i);
+    if (jobIdMatch) {
+      info.jobId = jobIdMatch[1];
+    }
+
+    // Extract job name: "for the Smith pool job", "the Jones rewire"
+    const jobNamePatterns = [
+      /\bfor\s+(?:the\s+)?([A-Z][a-z]+(?:\s+[a-z]+)*)\s+(?:job|project)/i,
+      /\b(?:the\s+)?([A-Z][a-z]+)(?:'s)?\s+(?:pool|rewire|install|upgrade|repair)/i,
+      /\bjob\s+(?:for\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i,
+    ];
+
+    for (const pattern of jobNamePatterns) {
+      const match = message.match(pattern);
+      if (match && match[1]) {
+        info.jobName = match[1].trim();
+        break;
+      }
+    }
+
+    return info;
   }
 
   /**
