@@ -1,0 +1,653 @@
+// ============================================
+// Prisma Schema for Pricebook Sync Engine
+// ============================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector, pg_trgm, uuid_ossp(map: "uuid-ossp")]
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum SyncStatus {
+  synced
+  pending_sync
+  sync_failed
+  conflict
+  local_only
+  st_only
+
+  @@map("sync_status")
+}
+
+enum SyncDirection {
+  from_st
+  to_st
+  bidirectional
+
+  @@map("sync_direction")
+}
+
+enum ConflictStatus {
+  unresolved
+  resolved_keep_st
+  resolved_keep_local
+  resolved_merged
+  ignored
+
+  @@map("conflict_status")
+}
+
+enum ConflictType {
+  both_modified
+  local_deleted_st_modified
+  st_deleted_local_modified
+  field_conflict
+
+  @@map("conflict_type")
+}
+
+enum ChangeAction {
+  create
+  update
+  delete
+  restore
+
+  @@map("change_action")
+}
+
+enum ChangeSource {
+  sync_from_st
+  sync_to_st
+  api
+  chat
+  n8n
+  manual
+  system
+
+  @@map("change_source")
+}
+
+enum EntityType {
+  category
+  material
+  service
+  equipment
+
+  @@map("entity_type")
+}
+
+enum SyncJobStatus {
+  pending
+  running
+  completed
+  failed
+  partial
+  cancelled
+
+  @@map("sync_job_status")
+}
+
+// ============================================
+// MODEL: PricebookCategory
+// ============================================
+
+model PricebookCategory {
+  id          String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  stId        BigInt  @unique @map("st_id")
+  tenantId    BigInt  @map("tenant_id")
+  name        String  @db.VarChar(255)
+  code        String? @db.VarChar(100)
+  parentId    BigInt? @map("parent_id")
+  displayOrder Int    @default(0) @map("display_order")
+  active      Boolean @default(true)
+  categoryType String? @map("category_type") @db.VarChar(50)
+
+  // ServiceTitan Timestamps
+  stCreatedOn  DateTime? @map("st_created_on") @db.Timestamptz(6)
+  stModifiedOn DateTime? @map("st_modified_on") @db.Timestamptz(6)
+
+  // Local Timestamps
+  localCreatedAt  DateTime @default(now()) @map("local_created_at") @db.Timestamptz(6)
+  localModifiedAt DateTime @default(now()) @updatedAt @map("local_modified_at") @db.Timestamptz(6)
+
+  // Sync Metadata
+  lastSyncedAt  DateTime?     @map("last_synced_at") @db.Timestamptz(6)
+  syncStatus    SyncStatus    @default(synced) @map("sync_status")
+  syncDirection SyncDirection? @map("sync_direction")
+  syncError     String?       @map("sync_error") @db.Text
+
+  // Conflict Tracking
+  hasConflict  Boolean @default(false) @map("has_conflict")
+  conflictData Json?   @map("conflict_data")
+
+  // Soft Delete
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedInSt Boolean   @default(false) @map("deleted_in_st")
+
+  // Additional Metadata
+  metadata Json @default("{}") @db.JsonB
+
+  // Relations
+  materials  PricebookMaterial[]
+  services   PricebookService[]
+  equipment  PricebookEquipment[]
+  chatSessions ChatSession[]
+
+  @@map("pricebook_categories")
+  @@index([stId])
+  @@index([tenantId])
+  @@index([parentId])
+  @@index([name])
+  @@index([code])
+  @@index([syncStatus])
+  @@index([stModifiedOn])
+}
+
+// ============================================
+// MODEL: PricebookMaterial
+// ============================================
+
+model PricebookMaterial {
+  id         String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  stId       BigInt  @unique @map("st_id")
+  tenantId   BigInt  @map("tenant_id")
+  categoryId BigInt? @map("category_id")
+
+  // Basic Info
+  code        String  @db.VarChar(100)
+  name        String  @db.VarChar(500)
+  description String? @db.Text
+  displayName String? @map("display_name") @db.VarChar(500)
+
+  // Product Details
+  manufacturer String? @db.VarChar(255)
+  modelNumber  String? @map("model_number") @db.VarChar(255)
+  upc          String? @db.VarChar(50)
+  sku          String? @db.VarChar(100)
+  partNumber   String? @map("part_number") @db.VarChar(100)
+
+  // Pricing
+  cost        Decimal? @db.Decimal(18, 4)
+  price       Decimal? @db.Decimal(18, 4)
+  memberPrice Decimal? @map("member_price") @db.Decimal(18, 4)
+  addOnPrice  Decimal? @map("add_on_price") @db.Decimal(18, 4)
+  hours       Decimal? @db.Decimal(10, 4)
+
+  // Units
+  unitOfMeasure   String?  @map("unit_of_measure") @db.VarChar(50)
+  quantityOnHand  Decimal? @map("quantity_on_hand") @db.Decimal(18, 4)
+  quantityOnOrder Decimal? @map("quantity_on_order") @db.Decimal(18, 4)
+
+  // Warranty & Commission
+  warrantyMonths  Int?     @map("warranty_months")
+  commissionBonus Decimal? @map("commission_bonus") @db.Decimal(18, 4)
+  payType         String?  @map("pay_type") @db.VarChar(50)
+
+  // Flags
+  active    Boolean @default(true)
+  taxable   Boolean @default(true)
+  crossSell Boolean @default(false) @map("cross_sell")
+  account   String? @db.VarChar(100)
+
+  // Assets
+  primaryVendorId BigInt? @map("primary_vendor_id")
+  images          Json    @default("[]") @db.JsonB
+  assets          Json    @default("[]") @db.JsonB
+
+  // Custom Fields & Tags
+  customFields Json @default("{}") @map("custom_fields") @db.JsonB
+  tags         Json @default("[]") @db.JsonB
+  externalData Json @default("{}") @map("external_data") @db.JsonB
+
+  // ServiceTitan Timestamps
+  stCreatedOn  DateTime? @map("st_created_on") @db.Timestamptz(6)
+  stModifiedOn DateTime? @map("st_modified_on") @db.Timestamptz(6)
+
+  // Local Timestamps
+  localCreatedAt  DateTime @default(now()) @map("local_created_at") @db.Timestamptz(6)
+  localModifiedAt DateTime @default(now()) @updatedAt @map("local_modified_at") @db.Timestamptz(6)
+
+  // Sync Metadata
+  lastSyncedAt  DateTime?     @map("last_synced_at") @db.Timestamptz(6)
+  syncStatus    SyncStatus    @default(synced) @map("sync_status")
+  syncDirection SyncDirection? @map("sync_direction")
+  syncError     String?       @map("sync_error") @db.Text
+
+  // Conflict Tracking
+  hasConflict  Boolean @default(false) @map("has_conflict")
+  conflictData Json?   @map("conflict_data")
+
+  // Soft Delete
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedInSt Boolean   @default(false) @map("deleted_in_st")
+
+  // AI Embedding (stored as raw vector in DB, accessed via raw queries)
+  // embedding Unsupported("vector(1536)")?
+
+  // Additional Metadata
+  metadata Json @default("{}") @db.JsonB
+
+  // Foreign Key to local category
+  categoryUuid String?            @map("category_uuid") @db.Uuid
+  category     PricebookCategory? @relation(fields: [categoryUuid], references: [id], onDelete: SetNull)
+
+  @@map("pricebook_materials")
+  @@index([stId])
+  @@index([tenantId])
+  @@index([categoryId])
+  @@index([categoryUuid])
+  @@index([code])
+  @@index([name])
+  @@index([manufacturer])
+  @@index([sku])
+  @@index([syncStatus])
+  @@index([stModifiedOn])
+  @@index([price])
+}
+
+// ============================================
+// MODEL: PricebookService
+// ============================================
+
+model PricebookService {
+  id         String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  stId       BigInt  @unique @map("st_id")
+  tenantId   BigInt  @map("tenant_id")
+  categoryId BigInt? @map("category_id")
+
+  // Basic Info
+  code        String  @db.VarChar(100)
+  name        String  @db.VarChar(500)
+  description String? @db.Text
+  displayName String? @map("display_name") @db.VarChar(500)
+
+  // Pricing
+  price         Decimal? @db.Decimal(18, 4)
+  memberPrice   Decimal? @map("member_price") @db.Decimal(18, 4)
+  addOnPrice    Decimal? @map("add_on_price") @db.Decimal(18, 4)
+  durationHours Decimal? @map("duration_hours") @db.Decimal(10, 4)
+
+  // Labor
+  recommendedHours Decimal? @map("recommended_hours") @db.Decimal(10, 4)
+  laborRate        Decimal? @map("labor_rate") @db.Decimal(18, 4)
+
+  // Related Items
+  materialsIncluded Json @default("[]") @map("materials_included") @db.JsonB
+  equipmentIncluded Json @default("[]") @map("equipment_included") @db.JsonB
+
+  // Warranty & Commission
+  warrantyMonths  Int?     @map("warranty_months")
+  commissionBonus Decimal? @map("commission_bonus") @db.Decimal(18, 4)
+  payType         String?  @map("pay_type") @db.VarChar(50)
+
+  // Flags
+  active  Boolean @default(true)
+  taxable Boolean @default(true)
+  account String? @db.VarChar(100)
+
+  // Assets
+  images Json @default("[]") @db.JsonB
+  assets Json @default("[]") @db.JsonB
+
+  // Custom Fields & Tags
+  customFields Json @default("{}") @map("custom_fields") @db.JsonB
+  tags         Json @default("[]") @db.JsonB
+  externalData Json @default("{}") @map("external_data") @db.JsonB
+
+  // ServiceTitan Timestamps
+  stCreatedOn  DateTime? @map("st_created_on") @db.Timestamptz(6)
+  stModifiedOn DateTime? @map("st_modified_on") @db.Timestamptz(6)
+
+  // Local Timestamps
+  localCreatedAt  DateTime @default(now()) @map("local_created_at") @db.Timestamptz(6)
+  localModifiedAt DateTime @default(now()) @updatedAt @map("local_modified_at") @db.Timestamptz(6)
+
+  // Sync Metadata
+  lastSyncedAt  DateTime?     @map("last_synced_at") @db.Timestamptz(6)
+  syncStatus    SyncStatus    @default(synced) @map("sync_status")
+  syncDirection SyncDirection? @map("sync_direction")
+  syncError     String?       @map("sync_error") @db.Text
+
+  // Conflict Tracking
+  hasConflict  Boolean @default(false) @map("has_conflict")
+  conflictData Json?   @map("conflict_data")
+
+  // Soft Delete
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedInSt Boolean   @default(false) @map("deleted_in_st")
+
+  // Additional Metadata
+  metadata Json @default("{}") @db.JsonB
+
+  // Foreign Key to local category
+  categoryUuid String?            @map("category_uuid") @db.Uuid
+  category     PricebookCategory? @relation(fields: [categoryUuid], references: [id], onDelete: SetNull)
+
+  @@map("pricebook_services")
+  @@index([stId])
+  @@index([tenantId])
+  @@index([categoryId])
+  @@index([categoryUuid])
+  @@index([code])
+  @@index([name])
+  @@index([syncStatus])
+  @@index([stModifiedOn])
+  @@index([price])
+}
+
+// ============================================
+// MODEL: PricebookEquipment
+// ============================================
+
+model PricebookEquipment {
+  id         String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  stId       BigInt  @unique @map("st_id")
+  tenantId   BigInt  @map("tenant_id")
+  categoryId BigInt? @map("category_id")
+
+  // Basic Info
+  code        String  @db.VarChar(100)
+  name        String  @db.VarChar(500)
+  description String? @db.Text
+  displayName String? @map("display_name") @db.VarChar(500)
+
+  // Product Details
+  manufacturer String? @db.VarChar(255)
+  modelNumber  String? @map("model_number") @db.VarChar(255)
+
+  // Pricing
+  cost        Decimal? @db.Decimal(18, 4)
+  price       Decimal? @db.Decimal(18, 4)
+  memberPrice Decimal? @map("member_price") @db.Decimal(18, 4)
+  addOnPrice  Decimal? @map("add_on_price") @db.Decimal(18, 4)
+
+  // Labor
+  recommendedHours Decimal? @map("recommended_hours") @db.Decimal(10, 4)
+
+  // Warranty
+  warrantyYears  Int? @map("warranty_years")
+  warrantyMonths Int? @map("warranty_months")
+
+  // Commission
+  commissionBonus Decimal? @map("commission_bonus") @db.Decimal(18, 4)
+  payType         String?  @map("pay_type") @db.VarChar(50)
+
+  // Flags
+  active  Boolean @default(true)
+  taxable Boolean @default(true)
+  account String? @db.VarChar(100)
+
+  // Assets
+  primaryVendorId BigInt? @map("primary_vendor_id")
+  images          Json    @default("[]") @db.JsonB
+  assets          Json    @default("[]") @db.JsonB
+
+  // Custom Fields & Tags
+  customFields Json @default("{}") @map("custom_fields") @db.JsonB
+  tags         Json @default("[]") @db.JsonB
+  externalData Json @default("{}") @map("external_data") @db.JsonB
+
+  // ServiceTitan Timestamps
+  stCreatedOn  DateTime? @map("st_created_on") @db.Timestamptz(6)
+  stModifiedOn DateTime? @map("st_modified_on") @db.Timestamptz(6)
+
+  // Local Timestamps
+  localCreatedAt  DateTime @default(now()) @map("local_created_at") @db.Timestamptz(6)
+  localModifiedAt DateTime @default(now()) @updatedAt @map("local_modified_at") @db.Timestamptz(6)
+
+  // Sync Metadata
+  lastSyncedAt  DateTime?     @map("last_synced_at") @db.Timestamptz(6)
+  syncStatus    SyncStatus    @default(synced) @map("sync_status")
+  syncDirection SyncDirection? @map("sync_direction")
+  syncError     String?       @map("sync_error") @db.Text
+
+  // Conflict Tracking
+  hasConflict  Boolean @default(false) @map("has_conflict")
+  conflictData Json?   @map("conflict_data")
+
+  // Soft Delete
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedInSt Boolean   @default(false) @map("deleted_in_st")
+
+  // Additional Metadata
+  metadata Json @default("{}") @db.JsonB
+
+  // Foreign Key to local category
+  categoryUuid String?            @map("category_uuid") @db.Uuid
+  category     PricebookCategory? @relation(fields: [categoryUuid], references: [id], onDelete: SetNull)
+
+  @@map("pricebook_equipment")
+  @@index([stId])
+  @@index([tenantId])
+  @@index([categoryId])
+  @@index([categoryUuid])
+  @@index([code])
+  @@index([name])
+  @@index([manufacturer])
+  @@index([modelNumber])
+  @@index([syncStatus])
+  @@index([stModifiedOn])
+  @@index([price])
+}
+
+// ============================================
+// MODEL: PricebookSyncLog
+// ============================================
+
+model PricebookSyncLog {
+  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+
+  // Sync Configuration
+  syncType    String        @map("sync_type") @db.VarChar(50)
+  direction   SyncDirection
+  entityTypes String[]      @default(["category", "material", "service", "equipment"]) @map("entity_types")
+
+  // Timing
+  startedAt       DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  completedAt     DateTime? @map("completed_at") @db.Timestamptz(6)
+  durationSeconds Int?      @map("duration_seconds")
+
+  // Statistics
+  recordsFetched    Int @default(0) @map("records_fetched")
+  recordsCreated    Int @default(0) @map("records_created")
+  recordsUpdated    Int @default(0) @map("records_updated")
+  recordsDeleted    Int @default(0) @map("records_deleted")
+  recordsSkipped    Int @default(0) @map("records_skipped")
+  conflictsDetected Int @default(0) @map("conflicts_detected")
+  errorsEncountered Int @default(0) @map("errors_encountered")
+
+  // Status
+  status       SyncJobStatus @default(pending)
+  errorMessage String?       @map("error_message") @db.Text
+  errorStack   String?       @map("error_stack") @db.Text
+
+  // Metadata
+  triggeredBy     ChangeSource @map("triggered_by")
+  triggeredByUser String?      @map("triggered_by_user") @db.VarChar(255)
+  config          Json         @default("{}") @db.JsonB
+
+  // Detailed Results
+  results Json @default("{}") @db.JsonB
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  conflicts PricebookSyncConflict[]
+  changes   PricebookChange[]
+
+  @@map("pricebook_sync_log")
+  @@index([status])
+  @@index([startedAt(sort: Desc)])
+  @@index([syncType])
+  @@index([direction])
+}
+
+// ============================================
+// MODEL: PricebookSyncConflict
+// ============================================
+
+model PricebookSyncConflict {
+  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+
+  // Entity Reference
+  entityType EntityType @map("entity_type")
+  entityId   String     @map("entity_id") @db.Uuid
+  stId       BigInt     @map("st_id")
+
+  // Conflict Details
+  conflictType ConflictType @map("conflict_type")
+
+  // Data Snapshots
+  stData    Json  @map("st_data") @db.JsonB
+  localData Json  @map("local_data") @db.JsonB
+  diff      Json? @db.JsonB
+
+  // Resolution
+  status             ConflictStatus @default(unresolved)
+  resolutionStrategy String?        @map("resolution_strategy") @db.VarChar(50)
+  resolvedData       Json?          @map("resolved_data") @db.JsonB
+  resolvedAt         DateTime?      @map("resolved_at") @db.Timestamptz(6)
+  resolvedBy         String?        @map("resolved_by") @db.VarChar(255)
+  resolutionNotes    String?        @map("resolution_notes") @db.Text
+
+  // Sync Reference
+  syncLogId String?           @map("sync_log_id") @db.Uuid
+  syncLog   PricebookSyncLog? @relation(fields: [syncLogId], references: [id], onDelete: SetNull)
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("pricebook_sync_conflicts")
+  @@index([entityType])
+  @@index([entityId])
+  @@index([stId])
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@index([syncLogId])
+}
+
+// ============================================
+// MODEL: PricebookChange (Audit Log)
+// ============================================
+
+model PricebookChange {
+  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+
+  // Entity Reference
+  entityType EntityType @map("entity_type")
+  entityId   String     @map("entity_id") @db.Uuid
+  stId       BigInt?    @map("st_id")
+
+  // Change Details
+  action ChangeAction
+  source ChangeSource
+
+  // Data
+  changedFields Json? @map("changed_fields") @db.JsonB
+  oldValues     Json? @map("old_values") @db.JsonB
+  newValues     Json? @map("new_values") @db.JsonB
+  fullSnapshot  Json? @map("full_snapshot") @db.JsonB
+
+  // User/Context
+  userId    String? @map("user_id") @db.VarChar(255)
+  userName  String? @map("user_name") @db.VarChar(255)
+  sessionId String? @map("session_id") @db.VarChar(255)
+  requestId String? @map("request_id") @db.VarChar(255)
+
+  // Sync Reference
+  syncLogId String?           @map("sync_log_id") @db.Uuid
+  syncLog   PricebookSyncLog? @relation(fields: [syncLogId], references: [id], onDelete: SetNull)
+
+  // Timestamp
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("pricebook_changes")
+  @@index([entityType])
+  @@index([entityId])
+  @@index([stId])
+  @@index([action])
+  @@index([source])
+  @@index([createdAt(sort: Desc)])
+  @@index([userId])
+  @@index([syncLogId])
+}
+
+// ============================================
+// MODEL: WebhookSubscription
+// ============================================
+
+model WebhookSubscription {
+  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+
+  // Webhook Configuration
+  webhookUrl String   @map("webhook_url") @db.Text
+  events     String[]
+
+  // Authentication
+  secretKey String? @map("secret_key") @db.VarChar(255)
+  headers   Json    @default("{}") @db.JsonB
+
+  // Status
+  active          Boolean   @default(true)
+  lastTriggeredAt DateTime? @map("last_triggered_at") @db.Timestamptz(6)
+  lastStatusCode  Int?      @map("last_status_code")
+  lastError       String?   @map("last_error") @db.Text
+  failureCount    Int       @default(0) @map("failure_count")
+
+  // Metadata
+  name        String? @db.VarChar(255)
+  description String? @db.Text
+  createdBy   String? @map("created_by") @db.VarChar(255)
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("pricebook_webhook_subscriptions")
+  @@index([active])
+}
+
+// ============================================
+// MODEL: ChatSession
+// ============================================
+
+model ChatSession {
+  id        String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  sessionId String @unique @map("session_id") @db.VarChar(255)
+
+  // Context
+  lastCategoryId   String?            @map("last_category_id") @db.Uuid
+  lastCategoryStId BigInt?            @map("last_category_st_id")
+  lastCategoryName String?            @map("last_category_name") @db.VarChar(255)
+  lastCategory     PricebookCategory? @relation(fields: [lastCategoryId], references: [id], onDelete: SetNull)
+
+  // Pending Action
+  pendingAction Json? @map("pending_action") @db.JsonB
+
+  // History (last N messages)
+  history Json @default("[]") @db.JsonB
+
+  // User Info
+  userId   String? @map("user_id") @db.VarChar(255)
+  userName String? @map("user_name") @db.VarChar(255)
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  expiresAt DateTime @default(dbgenerated("NOW() + INTERVAL '24 hours'")) @map("expires_at") @db.Timestamptz(6)
+
+  @@map("chat_sessions")
+  @@index([sessionId])
+  @@index([userId])
+  @@index([expiresAt])
+}

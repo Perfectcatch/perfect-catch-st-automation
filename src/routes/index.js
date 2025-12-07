@@ -38,6 +38,9 @@ import taskmanagementRoutes from './taskmanagement.routes.js';
 import telecomRoutes from './telecom.routes.js';
 import timesheetsRoutes from './timesheets.routes.js';
 
+// Chat routes
+import pricebookChatRoutes from './pricebook-chat.routes.js';
+
 const router = Router();
 
 // ═══════════════════════════════════════════════════════════════
@@ -76,5 +79,10 @@ router.use('/reporting', reportingRoutes);
 router.use('/task-management', taskmanagementRoutes);
 router.use('/telecom', telecomRoutes);
 router.use('/timesheets', timesheetsRoutes);
+
+// ═══════════════════════════════════════════════════════════════
+// CHAT ROUTES (AI-powered conversational interface)
+// ═══════════════════════════════════════════════════════════════
+router.use('/chat', pricebookChatRoutes);
 
 export default router;
