@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "pricebook": {
+      "command": "node",
+      "args": ["/opt/docker/servicetitan-ai/perfect-catch-st-automation/mcp-server/index.js"],
+      "env": {
+        "PRICEBOOK_API_URL": "http://localhost:3001"
+      }
+    }
+  }
+}

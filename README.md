@@ -677,6 +677,53 @@ A ready-to-use tool for Open WebUI is available at `openwebui/pricebook_tool.py`
 - `get_pricebook_categories()` - List all categories
 - `get_pricebook_status()` - Database statistics
 
+## 🆕 MCP Server (Model Context Protocol)
+
+An MCP server is available for integration with Claude Desktop and other MCP-compatible AI assistants.
+
+### Installation
+
+```bash
+# Python version (recommended)
+cd mcp-server
+pip install -r requirements.txt
+
+# Node.js version
+cd mcp-server
+npm install
+```
+
+### Claude Desktop Configuration
+
+Add to your Claude Desktop config:
+
+```json
+{
+  "mcpServers": {
+    "pricebook": {
+      "command": "python",
+      "args": ["/path/to/mcp-server/pricebook_mcp.py"],
+      "env": {
+        "PRICEBOOK_API_URL": "http://localhost:3001"
+      }
+    }
+  }
+}
+```
+
+### Available Tools (20+)
+
+| Category | Tools |
+|----------|-------|
+| **Search** | `search_pricebook`, `list_categories`, `get_materials`, `get_services`, `get_equipment` |
+| **Estimates** | `start_estimate`, `add_to_estimate`, `show_estimate`, `remove_from_estimate`, `create_estimate`, `clear_estimate` |
+| **Updates** | `update_service`, `update_material`, `get_service_details`, `get_material_details` |
+| **Sync** | `get_sync_status`, `trigger_sync`, `get_sync_logs` |
+| **Webhooks** | `list_webhook_events`, `list_webhook_subscriptions`, `subscribe_webhook` |
+| **Chat** | `chat` (natural language) |
+
+See `mcp-server/README.md` for full documentation.
+
 ## Error Response Format
 
 All errors return a consistent JSON structure:
