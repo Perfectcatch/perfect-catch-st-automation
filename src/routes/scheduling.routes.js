@@ -51,6 +51,44 @@ router.get('/technicians', async (req, res) => {
 });
 
 /**
+ * GET /technicians/by-skills - Find technicians with specific skills
+ * NOTE: This route MUST be defined before /technicians/:stId to avoid route conflicts
+ */
+router.get('/technicians/by-skills', async (req, res) => {
+  try {
+    const { skills, zoneId } = req.query;
+
+    if (!skills) {
+      return res.status(400).json({
+        success: false,
+        error: 'skills parameter is required (comma-separated)',
+      });
+    }
+
+    const skillsArray = skills.split(',').map(s => s.trim());
+
+    // Safely parse zoneId - ensure we don't pass NaN to PostgreSQL
+    const parsedZoneId = zoneId ? parseInt(zoneId, 10) : null;
+    const safeZoneId = parsedZoneId && !Number.isNaN(parsedZoneId) ? parsedZoneId : null;
+
+    const result = await db.query(
+      `SELECT * FROM find_technicians_by_skills($1, $2)`,
+      [skillsArray, safeZoneId]
+    );
+
+    res.json({
+      success: true,
+      requiredSkills: skillsArray,
+      count: result.rows.length,
+      data: result.rows,
+    });
+  } catch (error) {
+    logger.error({ error: error.message }, 'Failed to find technicians by skills');
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
  * GET /technicians/:stId - Get a specific technician
  */
 router.get('/technicians/:stId', async (req, res) => {
@@ -222,41 +260,8 @@ router.get('/availability', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-// SKILL MATCHING ENDPOINTS (local intelligence)
+// SKILL MANAGEMENT ENDPOINTS (local intelligence)
 // ═══════════════════════════════════════════════════════════════
-
-/**
- * GET /technicians/by-skills - Find technicians with specific skills
- */
-router.get('/technicians/by-skills', async (req, res) => {
-  try {
-    const { skills, zoneId } = req.query;
-
-    if (!skills) {
-      return res.status(400).json({
-        success: false,
-        error: 'skills parameter is required (comma-separated)',
-      });
-    }
-
-    const skillsArray = skills.split(',').map(s => s.trim());
-
-    const result = await db.query(
-      `SELECT * FROM find_technicians_by_skills($1, $2)`,
-      [skillsArray, zoneId ? parseInt(zoneId) : null]
-    );
-
-    res.json({
-      success: true,
-      requiredSkills: skillsArray,
-      count: result.rows.length,
-      data: result.rows,
-    });
-  } catch (error) {
-    logger.error({ error: error.message }, 'Failed to find technicians by skills');
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
 
 /**
  * POST /technicians/:id/skills - Add skill to technician
