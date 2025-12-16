@@ -208,9 +208,9 @@ export async function getCapacity(stClient, date, options = {}) {
     return cached;
   }
 
-  // Fetch from ServiceTitan
+  // Fetch technician shifts from ServiceTitan (capacity endpoint not available in all tenants)
   const { stEndpoints } = await import('../lib/stEndpoints.js');
-  const url = stEndpoints.capacity.list();
+  const url = stEndpoints.technicianShifts.list();
 
   const query = { startsOnOrAfter: date, endsOnOrBefore: date };
   if (options.zoneId) query.zoneId = options.zoneId;
@@ -222,10 +222,25 @@ export async function getCapacity(stClient, date, options = {}) {
   });
 
   if (response.status !== 200) {
-    throw new Error(`Failed to fetch capacity: ${response.status}`);
+    throw new Error(`Failed to fetch technician shifts: ${response.status}`);
   }
 
-  const data = response.data;
+  // Transform shifts data into capacity-like structure
+  const shifts = response.data?.data || [];
+  const data = {
+    date,
+    shifts,
+    totalTechnicians: shifts.length,
+    summary: shifts.reduce((acc, shift) => {
+      const techId = shift.technicianId;
+      if (!acc[techId]) {
+        acc[techId] = { technicianId: techId, shifts: [] };
+      }
+      acc[techId].shifts.push(shift);
+      return acc;
+    }, {}),
+  };
+
   set('capacity', key, data);
 
   // Also persist to database cache for backup
