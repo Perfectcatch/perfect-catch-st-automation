@@ -449,7 +449,7 @@ model PricebookSyncLog {
   // Sync Configuration
   syncType    String        @map("sync_type") @db.VarChar(50)
   direction   SyncDirection
-  entityTypes String[]      @default(["category", "material", "service", "equipment"]) @map("entity_types")
+  entityTypes EntityType[]  @default([category, material, service, equipment]) @map("entity_types")
 
   // Timing
   startedAt       DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
@@ -650,4 +650,259 @@ model ChatSession {
   @@index([sessionId])
   @@index([userId])
   @@index([expiresAt])
+}
+
+// ============================================
+// GHL SYNC MODELS (Batch 10)
+// ============================================
+
+enum GhlSyncStatus {
+  pending
+  synced
+  failed
+  skipped
+  conflict
+
+  @@map("ghl_sync_status_enum")
+}
+
+// ============================================
+// MODEL: GhlContact
+// Maps ST customers to GHL contacts
+// ============================================
+
+model GhlContact {
+  id            String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  ghlId         String  @unique @map("ghl_id") @db.VarChar(255)
+  ghlLocationId String? @map("ghl_location_id") @db.VarChar(255)
+
+  // ServiceTitan Reference
+  stCustomerId BigInt? @map("st_customer_id")
+
+  // Contact Info
+  firstName    String? @map("first_name") @db.VarChar(255)
+  lastName     String? @map("last_name") @db.VarChar(255)
+  name         String? @db.VarChar(500)
+  email        String? @db.VarChar(255)
+  phone        String? @db.VarChar(50)
+  addressLine1 String? @map("address_line1") @db.VarChar(500)
+  city         String? @db.VarChar(255)
+  state        String? @db.VarChar(100)
+  zip          String? @db.VarChar(20)
+  country      String? @db.VarChar(100)
+
+  // Additional Data
+  phoneNumbers   Json @default("[]") @map("phone_numbers") @db.JsonB
+  emailAddresses Json @default("[]") @map("email_addresses") @db.JsonB
+  tags           Json @default("[]") @db.JsonB
+  customFields   Json @default("{}") @map("custom_fields") @db.JsonB
+
+  // Source & Type
+  source String? @db.VarChar(255)
+  type   String? @db.VarChar(50)
+
+  // Sync Metadata
+  syncStatus    String?   @default("synced") @map("sync_status") @db.VarChar(50)
+  syncAttempts  Int       @default(0) @map("sync_attempts")
+  lastSyncError String?   @map("last_sync_error") @db.Text
+  stDataHash    String?   @map("st_data_hash") @db.VarChar(64)
+  ghlDataHash   String?   @map("ghl_data_hash") @db.VarChar(64)
+  syncedToSt    Boolean   @default(false) @map("synced_to_st")
+  stSyncError   String?   @map("st_sync_error") @db.Text
+
+  // GHL Timestamps
+  ghlCreatedAt DateTime? @map("ghl_created_at") @db.Timestamptz(6)
+  ghlUpdatedAt DateTime? @map("ghl_updated_at") @db.Timestamptz(6)
+
+  // Local Timestamps
+  localSyncedAt DateTime @default(now()) @map("local_synced_at") @db.Timestamptz(6)
+
+  // Full API Response
+  fullData Json @map("full_data") @db.JsonB
+
+  @@map("ghl_contacts")
+  @@index([ghlId])
+  @@index([stCustomerId])
+  @@index([email])
+  @@index([phone])
+  @@index([syncedToSt])
+}
+
+// ============================================
+// MODEL: GhlOpportunity
+// Maps ST jobs/estimates to GHL opportunities
+// ============================================
+
+model GhlOpportunity {
+  id            String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  ghlId         String  @unique @map("ghl_id") @db.VarChar(255)
+  ghlLocationId String? @map("ghl_location_id") @db.VarChar(255)
+
+  // ServiceTitan Reference
+  stJobId      BigInt? @map("st_job_id")
+  stEstimateId BigInt? @map("st_estimate_id")
+  stCustomerId BigInt? @map("st_customer_id")
+
+  // GHL References
+  ghlContactId        String? @map("ghl_contact_id") @db.VarChar(255)
+  ghlPipelineId       String  @map("ghl_pipeline_id") @db.VarChar(255)
+  ghlPipelineStageId  String? @map("ghl_pipeline_stage_id") @db.VarChar(255)
+  pipelineName        String? @map("pipeline_name") @db.VarChar(255)
+  stageName           String? @map("stage_name") @db.VarChar(255)
+
+  // Opportunity Info
+  name          String   @db.VarChar(500)
+  monetaryValue Decimal? @map("monetary_value") @db.Decimal(18, 4)
+  status        String?  @db.VarChar(50)
+  source        String?  @db.VarChar(255)
+  leadValue     Decimal? @map("lead_value") @db.Decimal(18, 4)
+
+  // Assignment & Activity
+  assignedTo       String?   @map("assigned_to") @db.VarChar(255)
+  notesCount       Int       @default(0) @map("notes_count")
+  tasksCount       Int       @default(0) @map("tasks_count")
+  lastActivityAt   DateTime? @map("last_activity_at") @db.Timestamptz(6)
+
+  // Custom Fields
+  customFields Json @default("{}") @map("custom_fields") @db.JsonB
+
+  // Sync Metadata
+  syncStatus    String?   @default("synced") @map("sync_status") @db.VarChar(50)
+  syncAttempts  Int       @default(0) @map("sync_attempts")
+  lastSyncError String?   @map("last_sync_error") @db.Text
+  stDataHash    String?   @map("st_data_hash") @db.VarChar(64)
+  ghlDataHash   String?   @map("ghl_data_hash") @db.VarChar(64)
+  syncedToSt    Boolean   @default(false) @map("synced_to_st")
+  stSyncError   String?   @map("st_sync_error") @db.Text
+
+  // GHL Timestamps
+  ghlCreatedAt       DateTime? @map("ghl_created_at") @db.Timestamptz(6)
+  ghlUpdatedAt       DateTime? @map("ghl_updated_at") @db.Timestamptz(6)
+  closedAt           DateTime? @map("closed_at") @db.Timestamptz(6)
+  lastStatusChangeAt DateTime? @map("last_status_change_at") @db.Timestamptz(6)
+
+  // Local Timestamps
+  localSyncedAt  DateTime @default(now()) @map("local_synced_at") @db.Timestamptz(6)
+  localCreatedAt DateTime @default(now()) @map("local_created_at") @db.Timestamptz(6)
+  localUpdatedAt DateTime @default(now()) @updatedAt @map("local_updated_at") @db.Timestamptz(6)
+
+  // Full API Response
+  fullData Json @map("full_data") @db.JsonB
+
+  @@map("ghl_opportunities")
+  @@index([ghlId])
+  @@index([stJobId])
+  @@index([stEstimateId])
+  @@index([stCustomerId])
+  @@index([ghlContactId])
+  @@index([ghlPipelineId])
+  @@index([ghlPipelineStageId])
+  @@index([status])
+  @@index([ghlUpdatedAt(sort: Desc)])
+  @@index([syncedToSt])
+}
+
+// ============================================
+// MODEL: GhlPipelineMapping
+// Maps ST job types to GHL pipelines
+// ============================================
+
+model GhlPipelineMapping {
+  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+
+  // ServiceTitan Reference
+  stJobTypeId       BigInt? @map("st_job_type_id")
+  stJobTypeName     String? @map("st_job_type_name") @db.VarChar(255)
+  stBusinessUnitId  BigInt? @map("st_business_unit_id")
+  stBusinessUnitName String? @map("st_business_unit_name") @db.VarChar(255)
+
+  // GHL Reference
+  ghlPipelineId       String  @map("ghl_pipeline_id") @db.VarChar(255)
+  ghlPipelineName     String? @map("ghl_pipeline_name") @db.VarChar(255)
+  ghlDefaultStageId   String? @map("ghl_default_stage_id") @db.VarChar(255)
+  ghlDefaultStageName String? @map("ghl_default_stage_name") @db.VarChar(255)
+  ghlLocationId       String  @map("ghl_location_id") @db.VarChar(255)
+
+  // Mapping Rules
+  isDefault Boolean @default(false) @map("is_default")
+  priority  Int     @default(0)
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([stJobTypeId, stBusinessUnitId, ghlLocationId], name: "uq_ghl_pipeline_mapping")
+  @@map("ghl_pipeline_mapping")
+  @@index([stJobTypeId])
+  @@index([stBusinessUnitId])
+  @@index([isDefault])
+}
+
+// ============================================
+// MODEL: GhlSyncLog
+// Audit log for GHL sync operations
+// ============================================
+
+model GhlSyncLog {
+  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+
+  // Sync Info
+  syncType  String @map("sync_type") @db.VarChar(50)
+  direction String @db.VarChar(20)
+
+  // Status
+  status String @db.VarChar(50)
+
+  // Statistics
+  recordsFetched Int @default(0) @map("records_fetched")
+  recordsCreated Int @default(0) @map("records_created")
+  recordsUpdated Int @default(0) @map("records_updated")
+  recordsFailed  Int @default(0) @map("records_failed")
+
+  // Timing
+  startedAt   DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
+  durationMs  Int?      @map("duration_ms")
+
+  // Error Details
+  errorMessage String? @map("error_message") @db.Text
+  errorDetails Json?   @map("error_details") @db.JsonB
+
+  // Metadata
+  triggeredBy String? @map("triggered_by") @db.VarChar(100)
+
+  @@map("ghl_sync_log")
+  @@index([syncType])
+  @@index([status])
+  @@index([startedAt(sort: Desc)])
+}
+
+// ============================================
+// MODEL: GhlWebhookEvent
+// Incoming webhooks from GHL
+// ============================================
+
+model GhlWebhookEvent {
+  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+
+  // Event Info
+  eventType     String  @map("event_type") @db.VarChar(100)
+  ghlLocationId String? @map("ghl_location_id") @db.VarChar(255)
+
+  // Payload
+  payload Json  @db.JsonB
+  headers Json? @db.JsonB
+
+  // Processing
+  processed       Boolean   @default(false)
+  processedAt     DateTime? @map("processed_at") @db.Timestamptz(6)
+  processingError String?   @map("processing_error") @db.Text
+
+  // Timestamps
+  receivedAt DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+
+  @@map("ghl_webhook_events")
+  @@index([eventType])
+  @@index([processed])
+  @@index([receivedAt(sort: Desc)])
 }
