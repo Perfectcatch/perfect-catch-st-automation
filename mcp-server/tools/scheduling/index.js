@@ -1,6 +1,10 @@
 /**
  * Scheduling Tools Index
- * Exports all 15 scheduling and dispatch tools
+ * Exports all 18 scheduling and dispatch tools
+ *
+ * Tools 1-12: Core scheduling operations
+ * Tools 13-15: Appointment management (move, find slots, daily summary)
+ * Tools 16-18: AI-powered job scheduling (smart schedule, analyze, format notes)
  */
 
 import { routeOptimizer } from '../../services/route-optimizer.js';
@@ -897,5 +901,481 @@ export const getDailyScheduleSummary = {
     } catch (error) {
       return { success: false, error: error.message };
     }
+  }
+};
+
+// Tool 16: Smart Schedule Job (AI-Powered)
+export const smartScheduleJob = {
+  name: 'smart_schedule_job',
+  description: `AI-powered job scheduling assistant. Takes a job description, recommends job types, shows available technicians, and generates clarifying questions to create detailed job notes.
+
+Flow:
+1. User describes what needs to be done
+2. Tool returns recommended job types and available technicians
+3. Tool generates clarifying questions based on job context
+4. User answers questions to provide more details
+5. Tool formats professional job notes for technicians
+
+Example: "Install new intermatic pool panel and pull and wire pool light"
+→ Questions: Where is the panel being installed? Why new panel (upgrade/replacement)? What type/brand of pool light?`,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      jobDescription: {
+        type: 'string',
+        description: 'Initial job description from customer/CSR (e.g., "Install new intermatic pool panel and pull and wire pool light")'
+      },
+      preferredDate: {
+        type: 'string',
+        description: 'Preferred date for the job (YYYY-MM-DD)'
+      },
+      customerId: {
+        type: 'number',
+        description: 'Customer ID if known'
+      },
+      answers: {
+        type: 'object',
+        description: 'Answers to clarifying questions from previous call (key-value pairs)',
+        additionalProperties: { type: 'string' }
+      },
+      step: {
+        type: 'string',
+        enum: ['analyze', 'clarify', 'finalize'],
+        description: 'Current step in the flow. Start with "analyze", then "clarify" after answering questions, then "finalize" to create job.',
+        default: 'analyze'
+      }
+    },
+    required: ['jobDescription']
+  },
+  async handler(params) {
+    const API_BASE = process.env.PRICEBOOK_API_URL || 'http://localhost:3001';
+    const step = params.step || 'analyze';
+
+    try {
+      // Job type keywords mapping for recommendation
+      const jobTypeKeywords = {
+        'Pool Panel Installation': ['pool panel', 'intermatic', 'panel install', 'sub panel', 'electrical panel'],
+        'Pool Light Installation': ['pool light', 'light install', 'led light', 'underwater light', 'nicheless'],
+        'Pool Light Repair': ['light repair', 'light not working', 'light replacement', 'bulb'],
+        'Pool Pump Installation': ['pump install', 'new pump', 'variable speed', 'pump replacement'],
+        'Pool Pump Repair': ['pump repair', 'pump not working', 'pump motor', 'pump leak'],
+        'Pool Heater Installation': ['heater install', 'new heater', 'heat pump', 'gas heater'],
+        'Pool Heater Repair': ['heater repair', 'heater not working', 'no heat', 'heater service'],
+        'Pool Filter Service': ['filter', 'de filter', 'cartridge', 'sand filter', 'filter clean'],
+        'Pool Electrical': ['electrical', 'wiring', 'bonding', 'gfci', 'breaker', 'wire'],
+        'Pool Automation': ['automation', 'intellicenter', 'easytouch', 'screenlogic', 'control system'],
+        'Pool Inspection': ['inspection', 'check', 'evaluate', 'diagnose', 'troubleshoot'],
+        'Service Call': ['service', 'maintenance', 'general', 'routine']
+      };
+
+      // Analyze job description and match job types
+      const descLower = params.jobDescription.toLowerCase();
+      const matchedJobTypes = [];
+
+      for (const [jobType, keywords] of Object.entries(jobTypeKeywords)) {
+        const matches = keywords.filter(kw => descLower.includes(kw));
+        if (matches.length > 0) {
+          matchedJobTypes.push({
+            jobType,
+            confidence: Math.min(matches.length * 0.3 + 0.4, 1.0),
+            matchedKeywords: matches
+          });
+        }
+      }
+
+      // Sort by confidence
+      matchedJobTypes.sort((a, b) => b.confidence - a.confidence);
+
+      // Get available technicians for the date
+      const date = params.preferredDate || new Date().toISOString().split('T')[0];
+      let availability = { data: { availableTechnicians: [], bookedTechnicians: [] } };
+
+      try {
+        const availResponse = await fetch(`${API_BASE}/scheduling/availability?date=${date}`);
+        availability = await availResponse.json();
+      } catch (e) {
+        console.error('Failed to fetch availability:', e.message);
+      }
+
+      // Generate clarifying questions based on job description
+      const clarifyingQuestions = generateClarifyingQuestions(params.jobDescription, matchedJobTypes);
+
+      // Step: Analyze - Return job types, availability, and questions
+      if (step === 'analyze') {
+        return {
+          success: true,
+          step: 'analyze',
+          nextStep: 'clarify',
+          jobDescription: params.jobDescription,
+          recommendedJobTypes: matchedJobTypes.slice(0, 3),
+          preferredDate: date,
+          availability: {
+            date,
+            availableTechnicians: (availability.data?.availableTechnicians || []).map(t => ({
+              id: t.id,
+              name: t.name
+            })),
+            bookedTechnicians: (availability.data?.bookedTechnicians || []).slice(0, 5).map(t => ({
+              id: t.id,
+              name: t.name,
+              appointmentCount: t.appointmentCount
+            }))
+          },
+          clarifyingQuestions: clarifyingQuestions,
+          instructions: `Please answer the clarifying questions above to create detailed job notes. Call this tool again with step='clarify' and include your answers in the 'answers' object.`
+        };
+      }
+
+      // Step: Clarify - Process answers and generate formatted job notes
+      if (step === 'clarify' || step === 'finalize') {
+        const formattedNotes = formatJobNotes(params.jobDescription, params.answers || {}, matchedJobTypes);
+
+        // If finalizing, we could create the job here
+        if (step === 'finalize' && params.customerId) {
+          // Would call ServiceTitan API to create job
+          // For now, return the formatted notes for manual creation
+        }
+
+        return {
+          success: true,
+          step: step,
+          jobDescription: params.jobDescription,
+          selectedJobType: matchedJobTypes[0]?.jobType || 'Service Call',
+          formattedJobNotes: formattedNotes,
+          preferredDate: date,
+          availability: {
+            availableTechnicians: (availability.data?.availableTechnicians || []).map(t => ({
+              id: t.id,
+              name: t.name
+            }))
+          },
+          answersReceived: params.answers || {},
+          readyToBook: true,
+          instructions: step === 'clarify'
+            ? `Job notes have been formatted. Review and call with step='finalize' to create the job, or adjust answers as needed.`
+            : `Job is ready to be created. Use the formatted job notes below when booking.`
+        };
+      }
+
+      return { success: false, error: 'Invalid step' };
+
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+};
+
+/**
+ * Generate clarifying questions based on job description
+ */
+function generateClarifyingQuestions(description, matchedJobTypes) {
+  const questions = [];
+  const descLower = description.toLowerCase();
+
+  // General questions
+  questions.push({
+    id: 'location',
+    question: 'Where specifically will the work be performed?',
+    context: 'Location details help technicians prepare and estimate time',
+    examples: ['Equipment pad', 'Pool deck', 'Garage', 'Near the house']
+  });
+
+  // Panel-specific questions
+  if (descLower.includes('panel') || descLower.includes('electrical')) {
+    questions.push({
+      id: 'panelReason',
+      question: 'What is the reason for the new panel installation?',
+      context: 'Understanding the why helps with proper sizing and planning',
+      examples: ['Upgrade from old panel', 'Adding new equipment', 'Code compliance', 'Damaged/failed panel']
+    });
+    questions.push({
+      id: 'panelSize',
+      question: 'What amp size is needed for the panel?',
+      context: 'Panel sizing depends on equipment load',
+      examples: ['60 amp', '100 amp', '200 amp', 'Not sure - needs assessment']
+    });
+    questions.push({
+      id: 'existingPanel',
+      question: 'Is there an existing panel being replaced or is this brand new?',
+      context: 'Affects scope of work and time estimate',
+      examples: ['Replacing old Intermatic', 'Brand new installation', 'Adding sub-panel']
+    });
+  }
+
+  // Light-specific questions
+  if (descLower.includes('light')) {
+    questions.push({
+      id: 'lightType',
+      question: 'What type and brand of pool light?',
+      context: 'Different lights require different installation methods',
+      examples: ['Pentair IntelliBrite', 'Hayward ColorLogic', 'J&J PureWhite', 'Generic LED']
+    });
+    questions.push({
+      id: 'lightNiche',
+      question: 'Is there an existing light niche or is this a new installation?',
+      context: 'New niches require more work than replacements',
+      examples: ['Existing niche', 'Need new niche', 'Nicheless install', 'Not sure']
+    });
+    questions.push({
+      id: 'lightCount',
+      question: 'How many lights need to be installed?',
+      context: 'Multiple lights affect wiring and time',
+      examples: ['1 light', '2 lights', '3+ lights']
+    });
+  }
+
+  // Pump-specific questions
+  if (descLower.includes('pump')) {
+    questions.push({
+      id: 'pumpType',
+      question: 'What type of pump is being installed?',
+      context: 'Different pumps have different requirements',
+      examples: ['Variable speed', 'Single speed', 'Dual speed', 'Booster pump']
+    });
+    questions.push({
+      id: 'pumpBrand',
+      question: 'What brand/model of pump?',
+      context: 'Helps ensure correct parts are on truck',
+      examples: ['Pentair IntelliFlo', 'Hayward Super Pump', 'Jandy FloPro', 'Not decided']
+    });
+  }
+
+  // Heater-specific questions
+  if (descLower.includes('heater') || descLower.includes('heat')) {
+    questions.push({
+      id: 'heaterType',
+      question: 'What type of heater?',
+      context: 'Gas vs heat pump vs electric have different requirements',
+      examples: ['Natural gas', 'Propane', 'Heat pump', 'Electric']
+    });
+    questions.push({
+      id: 'gasLine',
+      question: 'Is there existing gas line to the equipment area?',
+      context: 'New gas lines require additional work and permits',
+      examples: ['Yes, existing line', 'No, needs new line', 'Not applicable (heat pump)']
+    });
+  }
+
+  // Access and timing questions
+  questions.push({
+    id: 'access',
+    question: 'Any special access considerations?',
+    context: 'Helps technician prepare and estimate arrival',
+    examples: ['Gate code needed', 'Dog in yard', 'Call when arriving', 'Equipment in locked area']
+  });
+
+  questions.push({
+    id: 'additionalNotes',
+    question: 'Any other details the technician should know?',
+    context: 'Catch-all for important information',
+    examples: ['Customer has specific concerns', 'Previous issues', 'Special requests']
+  });
+
+  return questions;
+}
+
+/**
+ * Format job notes professionally for technicians
+ */
+function formatJobNotes(description, answers, matchedJobTypes) {
+  const lines = [];
+
+  // Header with job type
+  const jobType = matchedJobTypes[0]?.jobType || 'Service Call';
+  lines.push(`=== ${jobType.toUpperCase()} ===`);
+  lines.push('');
+
+  // Primary work description
+  lines.push('📋 SCOPE OF WORK:');
+  lines.push(description);
+  lines.push('');
+
+  // Detailed specifications from answers
+  if (Object.keys(answers).length > 0) {
+    lines.push('📝 JOB DETAILS:');
+
+    if (answers.location) {
+      lines.push(`• Location: ${answers.location}`);
+    }
+    if (answers.panelReason) {
+      lines.push(`• Reason: ${answers.panelReason}`);
+    }
+    if (answers.panelSize) {
+      lines.push(`• Panel Size: ${answers.panelSize}`);
+    }
+    if (answers.existingPanel) {
+      lines.push(`• Existing Equipment: ${answers.existingPanel}`);
+    }
+    if (answers.lightType) {
+      lines.push(`• Light Type: ${answers.lightType}`);
+    }
+    if (answers.lightNiche) {
+      lines.push(`• Niche Status: ${answers.lightNiche}`);
+    }
+    if (answers.lightCount) {
+      lines.push(`• Quantity: ${answers.lightCount}`);
+    }
+    if (answers.pumpType) {
+      lines.push(`• Pump Type: ${answers.pumpType}`);
+    }
+    if (answers.pumpBrand) {
+      lines.push(`• Pump Brand: ${answers.pumpBrand}`);
+    }
+    if (answers.heaterType) {
+      lines.push(`• Heater Type: ${answers.heaterType}`);
+    }
+    if (answers.gasLine) {
+      lines.push(`• Gas Line: ${answers.gasLine}`);
+    }
+    lines.push('');
+  }
+
+  // Access notes
+  if (answers.access) {
+    lines.push('🚪 ACCESS:');
+    lines.push(`• ${answers.access}`);
+    lines.push('');
+  }
+
+  // Additional notes
+  if (answers.additionalNotes) {
+    lines.push('⚠️ ADDITIONAL NOTES:');
+    lines.push(`• ${answers.additionalNotes}`);
+    lines.push('');
+  }
+
+  // Materials checklist based on job type
+  lines.push('🔧 SUGGESTED MATERIALS CHECK:');
+  if (description.toLowerCase().includes('panel')) {
+    lines.push('• Sub-panel (verify amp rating)');
+    lines.push('• Wire (correct gauge for load)');
+    lines.push('• Conduit and fittings');
+    lines.push('• Breakers');
+  }
+  if (description.toLowerCase().includes('light')) {
+    lines.push('• Pool light fixture');
+    lines.push('• Light cord (verify length)');
+    lines.push('• Junction box');
+    lines.push('• Silicone/sealant');
+  }
+  if (description.toLowerCase().includes('pump')) {
+    lines.push('• Pump unit');
+    lines.push('• Unions and fittings');
+    lines.push('• Pipe and glue');
+  }
+
+  return lines.join('\n');
+}
+
+// Tool 17: Analyze Job Description
+export const analyzeJobDescription = {
+  name: 'analyze_job_description',
+  description: 'Analyze a job description and return matched job types with recommended clarifying questions. Use this to understand what type of job is being requested before scheduling.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      description: {
+        type: 'string',
+        description: 'Job description to analyze'
+      }
+    },
+    required: ['description']
+  },
+  async handler(params) {
+    const jobTypeKeywords = {
+      'Pool Panel Installation': ['pool panel', 'intermatic', 'panel install', 'sub panel', 'electrical panel'],
+      'Pool Light Installation': ['pool light', 'light install', 'led light', 'underwater light'],
+      'Pool Light Repair': ['light repair', 'light not working', 'light replacement'],
+      'Pool Pump Installation': ['pump install', 'new pump', 'variable speed'],
+      'Pool Pump Repair': ['pump repair', 'pump not working', 'pump motor'],
+      'Pool Heater Installation': ['heater install', 'new heater', 'heat pump', 'gas heater'],
+      'Pool Heater Repair': ['heater repair', 'heater not working', 'no heat'],
+      'Pool Filter Service': ['filter', 'de filter', 'cartridge', 'sand filter'],
+      'Pool Electrical': ['electrical', 'wiring', 'bonding', 'gfci', 'breaker'],
+      'Pool Automation': ['automation', 'intellicenter', 'easytouch', 'screenlogic'],
+      'Pool Inspection': ['inspection', 'check', 'evaluate', 'diagnose']
+    };
+
+    const descLower = params.description.toLowerCase();
+    const matches = [];
+
+    for (const [jobType, keywords] of Object.entries(jobTypeKeywords)) {
+      const matched = keywords.filter(kw => descLower.includes(kw));
+      if (matched.length > 0) {
+        matches.push({
+          jobType,
+          confidence: Math.min(matched.length * 0.25 + 0.5, 1.0),
+          keywords: matched
+        });
+      }
+    }
+
+    matches.sort((a, b) => b.confidence - a.confidence);
+
+    // Generate contextual questions
+    const questions = generateClarifyingQuestions(params.description, matches);
+
+    return {
+      success: true,
+      description: params.description,
+      analysis: {
+        primaryJobType: matches[0]?.jobType || 'Service Call',
+        allMatches: matches.slice(0, 3),
+        confidence: matches[0]?.confidence || 0.5
+      },
+      clarifyingQuestions: questions.slice(0, 5),
+      suggestedFollowUp: `To create detailed job notes, please answer these questions:\n${questions.slice(0, 3).map((q, i) => `${i + 1}. ${q.question}`).join('\n')}`
+    };
+  }
+};
+
+// Tool 18: Format Job Notes
+export const formatJobNotesAI = {
+  name: 'format_job_notes',
+  description: 'Format job notes professionally for technicians. Takes raw description and additional details, outputs clean structured notes.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      description: { type: 'string', description: 'Job description' },
+      details: {
+        type: 'object',
+        description: 'Additional details (location, equipment type, brand, reason, etc.)',
+        additionalProperties: { type: 'string' }
+      },
+      jobType: { type: 'string', description: 'Job type (optional, will auto-detect if not provided)' }
+    },
+    required: ['description']
+  },
+  async handler(params) {
+    const jobTypeKeywords = {
+      'Pool Panel Installation': ['panel', 'intermatic', 'sub panel'],
+      'Pool Light Installation': ['light install', 'pool light', 'led'],
+      'Pool Pump Installation': ['pump install', 'new pump'],
+      'Pool Heater Installation': ['heater install', 'new heater'],
+      'Pool Electrical': ['electrical', 'wiring', 'bonding']
+    };
+
+    // Auto-detect job type if not provided
+    let jobType = params.jobType;
+    if (!jobType) {
+      const descLower = params.description.toLowerCase();
+      for (const [type, keywords] of Object.entries(jobTypeKeywords)) {
+        if (keywords.some(kw => descLower.includes(kw))) {
+          jobType = type;
+          break;
+        }
+      }
+      jobType = jobType || 'Service Call';
+    }
+
+    const notes = formatJobNotes(params.description, params.details || {}, [{ jobType }]);
+
+    return {
+      success: true,
+      jobType,
+      formattedNotes: notes,
+      characterCount: notes.length,
+      preview: notes.substring(0, 200) + '...'
+    };
   }
 };

@@ -7,7 +7,7 @@
  * Tool Categories:
  * - Estimates (15 tools)
  * - Customers (8 tools)
- * - Scheduling (15 tools)
+ * - Scheduling (18 tools)
  * - Jobs (10 tools)
  * - Invoicing (6 tools)
  * - Analytics (8 tools)
@@ -109,7 +109,7 @@ const ALL_TOOLS = [
   // Customer Tools (8)
   ...collectTools(customerTools),
   
-  // Scheduling Tools (12)
+  // Scheduling Tools (18)
   ...collectTools(schedulingTools),
   
   // Job Tools (10)
