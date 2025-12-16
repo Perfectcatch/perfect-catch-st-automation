@@ -1,54 +1,87 @@
-# Perfect Catch ST Automation Server
+# Perfect Catch ST Automation Platform
 
-Production-grade ServiceTitan API proxy server for Perfect Catch Electric & Pools. This server acts as the authentication and proxy layer for n8n workflows, Windsurf agents, and other services.
+A comprehensive automation platform for Perfect Catch Electric & Pools that integrates ServiceTitan, GoHighLevel, Slack, VAPI voice AI, and vendor pricing systems.
 
-**Version:** 2.0.0  
-**Total Endpoints:** 372+  
-**Total Modules:** 19  
-**Last Updated:** December 7, 2025
+**Version:** 2.2.0
+**Last Updated:** December 16, 2025
+
+---
+
+## Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      PERFECT CATCH AUTOMATION                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌─────────────┐  │
+│  │ ServiceTitan │  │  GoHighLevel │  │    Slack     │  │    VAPI     │  │
+│  │     API      │  │     API      │  │   Bot/App    │  │  Voice AI   │  │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬──────┘  │
+│         │                 │                 │                 │         │
+│         ▼                 ▼                 ▼                 ▼         │
+│  ┌───────────────────────────────────────────────────────────────────┐  │
+│  │                    AUTOMATION PLATFORM                             │  │
+│  │  • Sync Engine (ST → PostgreSQL)   • Pricebook Engine             │  │
+│  │  • Scheduling Module (Smart Match) • Workflow Engine               │  │
+│  │  • MCP Server (95 AI Tools)        • Chat Agent (NLP)             │  │
+│  │  • Vendor Scrapers (Pool360/CED)   • Self-Healing Agent           │  │
+│  └───────────────────────────────────────────────────────────────────┘  │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
 
 ## Features
 
-### Core API Features
-- **OAuth Token Management**: Automatic token acquisition, caching, and refresh
-- **Full HTTP Verb Support**: GET, POST, PUT, DELETE, PATCH
-- **Retry Logic**: Automatic retry for 429 (rate limit) and 5xx errors
-- **Error Normalization**: Consistent error response format
-- **Request Logging**: Structured logging with Pino
-- **Rate Limiting**: Configurable request rate limiting
-- **API Key Protection**: Optional authentication for internal endpoints
-- **Health Checks**: `/ping`, `/health`, and `/status` endpoints
-- **Comprehensive ServiceTitan Coverage**: 19 modules with 372+ endpoints
+### Core Components
 
-### 🆕 Pricebook Sync Engine
-- **Bi-directional Sync**: Sync pricebook data between ServiceTitan and local PostgreSQL
-- **Local Database**: 6,000+ items (categories, materials, services, equipment)
-- **Automated Scheduling**: Daily full sync + 6-hour incremental syncs
-- **Conflict Detection**: Track and resolve sync conflicts
+| Component | Description | Status |
+|-----------|-------------|--------|
+| **ServiceTitan Sync** | Bi-directional sync with ST API | ✅ Active |
+| **Scheduling Module** | Smart technician matching, skill-based dispatch | ✅ Active |
+| **Workflow Engine** | Event-driven automation with triggers | ✅ Active |
+| **MCP Server** | 95 AI tools across 12 categories for Claude | ✅ Active |
+| **Pricebook Chat Agent** | Natural language pricebook & estimate building | ✅ Active |
+| **GHL Integration** | Bi-directional GoHighLevel sync | ✅ Active |
+| **Slack Integration** | Slash commands, interactive modals, DM support | ✅ Active |
+| **VAPI Integration** | Voice AI endpoints for real-time availability | ✅ Active |
+| **Pricebook Engine** | ST pricebook sync with vendor price comparison | ✅ Active |
+| **Vendor Scrapers** | Pool360, CED pricing scrapers | ✅ Active |
+| **Self-Healing Agent** | Auto-recovery monitoring | ✅ Active |
 
-### 🆕 AI-Powered Chat Agent
-- **Natural Language Queries**: Search pricebook with plain English
-- **OpenAI GPT-4 Integration**: Intelligent intent classification
-- **Job-Based Estimates**: Build estimates conversationally
-- **Session Context**: Maintains conversation state
+### Data Synced
 
-### 🆕 n8n Webhook Integration
-- **Event Subscriptions**: Subscribe to pricebook events
-- **Webhook Delivery**: Automatic event notifications
-- **12 Event Types**: material_created, sync_completed, etc.
+| Entity | Records | Sync Frequency |
+|--------|---------|----------------|
+| Customers | 1,682 | Every 6 hours |
+| Jobs | 3,223 | Every 6 hours |
+| Estimates | 1,220 | Every 6 hours |
+| Invoices | 3,370 | Every 6 hours |
+| Technicians | 9 | Every 4 hours |
+| Teams | 6 | Every 4 hours |
+| Zones | 12 | Every 4 hours |
+| Job Types | 37 | Every 4 hours |
+| Pricebook Items | 6,000+ | Daily |
+
+---
 
 ## Quick Start
 
 ### Prerequisites
 
 - Node.js >= 18.0.0
-- npm or yarn
+- Docker & Docker Compose
+- PostgreSQL 15+
 - ServiceTitan API credentials
+- GoHighLevel API key (optional)
 
 ### Installation
 
 ```bash
 # Clone the repository
+git clone <repo-url>
 cd perfect-catch-st-automation
 
 # Install dependencies
@@ -57,691 +90,405 @@ npm install
 # Copy environment template
 cp .env.example .env
 
-# Edit .env with your ServiceTitan credentials
-```
+# Edit .env with your credentials
+nano .env
 
-### Running Locally
+# Run database migrations
+npm run db:migrate:deploy
 
-```bash
-# Development mode (with hot reload)
-npm run dev
-
-# Production mode
+# Start the server
 npm start
-
-# Run legacy server (original api-server.js)
-npm run legacy
 ```
 
-### Testing
+### Docker Deployment
 
 ```bash
-# Run unit tests
-npm test
+# Build and start all services
+docker compose up -d
 
-# Run tests with coverage
-npm run test:coverage
+# Start background workers
+docker compose up -d sync-worker workflow-worker monitoring-agent
 
-# Run smoke tests (requires running server)
-npm run smoke
+# Check status
+docker ps | grep st-
 ```
 
-## Environment Variables
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `SERVICE_TITAN_TENANT_ID` | Yes | - | ServiceTitan tenant ID |
-| `SERVICE_TITAN_CLIENT_ID` | Yes | - | OAuth client ID |
-| `SERVICE_TITAN_CLIENT_SECRET` | Yes | - | OAuth client secret |
-| `SERVICE_TITAN_APP_KEY` | Yes | - | ST application key |
-| `PORT` | No | 3001 | Server port |
-| `NODE_ENV` | No | development | Environment (development/production/test) |
-| `API_KEY` | No | - | Optional API key for authentication |
-| `RATE_LIMIT_MAX_REQUESTS` | No | 100 | Max requests per window (0 to disable) |
-| `MAX_RETRIES` | No | 3 | Retry attempts for failed requests |
-| `DATABASE_URL` | No | - | PostgreSQL connection string (for pricebook sync) |
-| `OPENAI_API_KEY` | No | - | OpenAI API key (for chat agent) |
-| `SYNC_SCHEDULER_ENABLED` | No | true | Enable automatic sync scheduling |
-| `SYNC_FULL_CRON` | No | 0 2 * * * | Full sync cron schedule |
-| `SYNC_INCREMENTAL_CRON` | No | 0 */6 * * * | Incremental sync cron schedule |
+---
 
 ## Project Structure
 
 ```
 perfect-catch-st-automation/
 ├── src/
-│   ├── app.js                    # Express app setup
-│   ├── server.js                 # Entry point
-│   ├── config/
-│   │   ├── index.js              # Config loader
-│   │   └── env.schema.js         # Zod validation
-│   ├── routes/
-│   │   ├── index.js              # Route aggregator
-│   │   ├── health.routes.js      # Health endpoints
-│   │   ├── pricebook-chat.routes.js  # Chat agent routes
-│   │   └── ...                   # Other route files
-│   ├── controllers/              # Business logic
 │   ├── services/
-│   │   ├── stClient.js           # ServiceTitan API client
-│   │   └── tokenManager.js       # OAuth token management
-│   ├── middleware/               # Express middleware
-│   ├── lib/                      # Utilities
-│   ├── sync/
-│   │   └── pricebook/
-│   │       ├── pricebook-sync.engine.js  # Sync engine
-│   │       ├── sync-scheduler.js         # Cron scheduler
-│   │       └── sync.controller.js        # Sync API
-│   ├── chat/
-│   │   ├── pricebook-chat.agent.js       # Chat agent
-│   │   ├── intent-classifier.js          # Intent classification
-│   │   ├── entity-extractor.js           # Entity extraction
-│   │   └── context-manager.js            # Session management
+│   │   ├── sync/              # ServiceTitan sync engine
+│   │   ├── workflow/          # Event-driven workflow engine
+│   │   ├── monitoring/        # Health monitoring & self-healing
+│   │   └── database.js        # Database connection pool
 │   ├── integrations/
-│   │   └── n8n/
-│   │       ├── webhook-handler.js        # Webhook processing
-│   │       └── n8n.controller.js         # n8n API
-│   └── db/
-│       ├── prisma.js                     # Prisma client
-│       └── migrations/                   # SQL migrations
-├── prisma/
-│   └── schema.prisma             # Database schema
-├── scripts/
-│   └── populate-pricebook-db.js  # Database population
-├── openwebui/
-│   └── pricebook_tool.py         # Open WebUI integration
-├── tests/                        # Test files
-├── docs/                         # Documentation
-└── docker-compose.pricebook.yml  # Full stack deployment
+│   │   ├── ghl/               # GoHighLevel bi-directional sync
+│   │   └── slack/             # Slack bot, slash commands, modals
+│   ├── scrapers/
+│   │   ├── pool360/           # Pool360 vendor scraper
+│   │   ├── ced/               # CED vendor scraper
+│   │   └── common/            # Shared scraper utilities
+│   ├── sync/
+│   │   ├── pricebook/         # Pricebook sync engine
+│   │   └── scheduling/        # Scheduling module sync engine
+│   ├── chat/                  # AI chat agent (intent, NLP, context)
+│   ├── routes/                # Express API routes
+│   │   ├── scheduling.routes.js   # Scheduling API
+│   │   ├── vapi.routes.js         # VAPI voice AI endpoints
+│   │   ├── slack.routes.js        # Slack webhooks
+│   │   └── pricebook.routes.js    # Pricebook API
+│   ├── controllers/           # Route controllers
+│   ├── db/
+│   │   └── migrations/        # Database migrations (001-009)
+│   └── lib/                   # Shared utilities
+├── mcp-server/                # Model Context Protocol server
+│   ├── tools/                 # MCP tools (95 total)
+│   ├── services/              # AI services (estimator, NLP, analytics)
+│   └── index.js               # MCP entry point
+├── scripts/                   # Utility scripts
+├── docs/                      # Documentation
+│   ├── architecture/          # System architecture
+│   ├── deployment/            # Deployment guides
+│   ├── development/           # Developer guides
+│   ├── integrations/          # Integration guides
+│   ├── api/                   # API reference
+│   └── archive/               # Historical specs
+└── tests/                     # Test files
 ```
+
+---
+
+## NPM Scripts
+
+### Server
+
+| Script | Description |
+|--------|-------------|
+| `npm start` | Start production server |
+| `npm run dev` | Start development server with hot reload |
+
+### Sync Operations
+
+| Script | Description |
+|--------|-------------|
+| `npm run sync:initial` | Run full initial sync |
+| `npm run sync:st-full` | Full ServiceTitan sync |
+| `npm run sync:st-incremental` | Incremental sync |
+| `npm run sync:reference` | Sync reference data only |
+
+### GHL Operations
+
+| Script | Description |
+|--------|-------------|
+| `npm run ghl:sync:all` | Sync all from GHL |
+| `npm run ghl:sync:contacts` | Sync contacts from GHL |
+| `npm run ghl:sync:opportunities` | Sync opportunities from GHL |
+| `npm run ghl:push:estimates` | Push estimates to GHL |
+
+### Workers
+
+| Script | Description |
+|--------|-------------|
+| `npm run worker:sync` | Start sync scheduler |
+| `npm run worker:workflows` | Start workflow engine |
+| `npm run worker:monitor` | Start self-healing agent |
+
+### Debugging
+
+| Script | Description |
+|--------|-------------|
+| `npm run workflow:status` | Check workflow engine status |
+| `npm run test:workflow` | Test workflow triggering |
+| `npm run health:check` | Check system health |
+
+---
 
 ## API Endpoints
 
 ### Health & Status
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/ping` | Simple health check |
-| GET | `/health` | Detailed health with components |
-| GET | `/status` | Full status with metrics |
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Basic health check |
+| `/health/detailed` | GET | Detailed system health |
+| `/health/workflows` | GET | Workflow engine status |
+| `/status` | GET | Full system status |
+
+### ServiceTitan Proxy
+
+All ServiceTitan API endpoints are proxied through `/api/st/*`
+
+### Sync Operations
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/sync/full` | POST | Trigger full sync |
+| `/api/sync/incremental` | POST | Trigger incremental sync |
+| `/api/sync/status` | GET | Get sync status |
+| `/api/sync/scheduling/full` | POST | Trigger scheduling module sync |
+
+### Scheduling Module
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/scheduling/technicians` | GET | List technicians (cached) |
+| `/scheduling/technicians/:stId` | GET | Get technician with skills |
+| `/scheduling/technicians/by-skills` | GET | Find techs by required skills |
+| `/scheduling/technicians/:id/skills` | POST | Add skill to technician |
+| `/scheduling/teams` | GET | List all teams |
+| `/scheduling/zones` | GET | List all zones |
+| `/scheduling/job-types` | GET | List job types |
+| `/scheduling/job-profiles` | GET | List job profiles (local intelligence) |
+| `/scheduling/availability` | GET | Get availability for date |
+| `/scheduling/rules` | GET | List scheduling rules |
+| `/scheduling/rules` | POST | Create scheduling rule |
+| `/scheduling/stats` | GET | Entity & cache statistics |
+| `/scheduling/audit` | GET | Scheduling audit log |
+
+### VAPI Voice AI
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/vapi/technician-availability` | GET | Real-time tech availability |
+| `/vapi/technicians` | GET | List technicians (simplified) |
+| `/vapi/capacity` | GET | Dispatch capacity data |
+
+### Slack Integration
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/slack/events` | POST | Slack events webhook |
+| `/slack/commands/:command` | POST | Slash command handler |
+| `/slack/interactive` | POST | Interactive components |
+| `/slack/options` | POST | External select options |
+| `/slack/health` | GET | Slack integration health |
+
+### Pricebook
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/pricebook/services` | GET/POST | List/create services |
+| `/pricebook/materials` | GET/POST | List/create materials |
+| `/pricebook/equipment` | GET/POST | List/create equipment |
+| `/pricebook/categories` | GET/POST | List/create categories |
+| `/pricebook/images` | GET | Proxy ST images |
+
+### Chat Agent
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/chat` | POST | Send message to chat agent |
+| `/api/chat/session/:id` | GET | Get session context |
+| `/api/chat/session/:id` | DELETE | Clear session |
 
 ---
 
-### Core Modules (Original)
+## Environment Variables
 
-#### Jobs (`/jobs`)
+### Required
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/jobs` | List all jobs |
-| GET | `/jobs/:id` | Get job by ID |
-| GET | `/jobs/:id/notes` | Get job notes |
-| GET | `/jobs/:id/history` | Get job history |
+| Variable | Description |
+|----------|-------------|
+| `SERVICE_TITAN_TENANT_ID` | ServiceTitan tenant ID |
+| `SERVICE_TITAN_CLIENT_ID` | OAuth client ID |
+| `SERVICE_TITAN_CLIENT_SECRET` | OAuth client secret |
+| `SERVICE_TITAN_APP_KEY` | ST application key |
+| `DATABASE_URL` | PostgreSQL connection string |
 
-#### Customers (`/customers`)
+### Optional - Integrations
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/customers` | List all customers |
-| GET | `/customers/:id` | Get customer by ID |
-| POST | `/customers` | Create customer |
-| PUT | `/customers/:id` | Update customer |
-| GET | `/customers/contacts` | List all contacts |
-| GET | `/customers/:id/contacts` | Get customer contacts |
-
-#### Estimates (`/estimates`)
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/estimates` | List all estimates |
-| GET | `/estimates/:id` | Get estimate by ID |
-| POST | `/estimates` | Create estimate |
-| PUT | `/estimates/:id` | Update estimate |
-| PUT | `/estimates/:id/sell` | Mark as sold |
-| PUT | `/estimates/:id/unsell` | Unmark as sold |
-| PUT | `/estimates/:id/dismiss` | Dismiss estimate |
-| GET | `/estimates/:id/items` | List estimate items |
-| PUT | `/estimates/:id/items` | Update items |
-| DELETE | `/estimates/:id/items/:itemId` | Delete item |
-
-#### Opportunities (`/opportunities`)
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/opportunities` | List opportunities |
-| GET | `/opportunities/:id` | Get opportunity by ID |
-| GET | `/opportunities/:id/followups` | Get follow-ups |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | 3001 | Server port |
+| `NODE_ENV` | development | Environment |
+| `GHL_API_KEY` | - | GoHighLevel API key |
+| `GHL_LOCATION_ID` | - | GHL location ID |
+| `ANTHROPIC_API_KEY` | - | Claude API key (MCP/Chat) |
+| `OPENAI_API_KEY` | - | OpenAI API key (Chat Agent) |
+| `SLACK_BOT_TOKEN` | - | Slack bot OAuth token |
+| `SLACK_SIGNING_SECRET` | - | Slack request signing secret |
+| `TWILIO_ACCOUNT_SID` | - | Twilio account |
+| `TWILIO_AUTH_TOKEN` | - | Twilio auth token |
+| `SENDGRID_API_KEY` | - | SendGrid API key |
 
 ---
 
-### Accounting Module (`/accounting`) - 54 endpoints
+## Documentation
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/accounting/ap-bills` | List AP bills |
-| GET | `/accounting/ap-bills/:id` | Get AP bill by ID |
-| POST | `/accounting/ap-bills` | Create AP bill |
-| PATCH | `/accounting/ap-bills/:id` | Update AP bill |
-| DELETE | `/accounting/ap-bills/:id` | Delete AP bill |
-| GET | `/accounting/ap-credits` | List AP credits |
-| GET | `/accounting/ap-payments` | List AP payments |
-| GET | `/accounting/invoices` | List invoices |
-| GET | `/accounting/payments` | List payments |
-| GET | `/accounting/gl-accounts` | List GL accounts |
-| GET | `/accounting/journal-entries` | List journal entries |
-| GET | `/accounting/tax-zones` | List tax zones |
-| GET | `/accounting/*/export` | Export endpoints available |
+See [docs/INDEX.md](./docs/INDEX.md) for complete documentation.
+
+### Key Documents
+
+- [System Architecture](./docs/architecture/SYSTEM_ARCHITECTURE.md)
+- [Data Flow Diagrams](./docs/architecture/DATA_FLOW_DIAGRAM.md)
+- [Deployment Status](./docs/deployment/DEPLOYMENT_STATUS.md)
+- [Gaps & Recommendations](./docs/deployment/GAPS_AND_RECOMMENDATIONS.md)
 
 ---
 
-### Dispatch Module (`/dispatch`) - 36 endpoints
+## Docker Services
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/dispatch/appointment-assignments` | List assignments |
-| POST | `/dispatch/appointment-assignments/assign-technicians` | Assign technicians |
-| POST | `/dispatch/appointment-assignments/unassign-technicians` | Unassign technicians |
-| GET | `/dispatch/arrival-windows` | List arrival windows |
-| GET | `/dispatch/business-hours` | List business hours |
-| GET | `/dispatch/capacity` | Get capacity |
-| GET | `/dispatch/non-job-appointments` | List non-job appointments |
-| GET | `/dispatch/teams` | List teams |
-| GET | `/dispatch/technician-shifts` | List technician shifts |
-| GET | `/dispatch/technician-tracking` | Get technician tracking |
-| GET | `/dispatch/zones` | List zones |
+| Service | Container | Port | Description |
+|---------|-----------|------|-------------|
+| st-automation | perfect-catch-st-automation | 3001 | Main API server |
+| sync-worker | st-sync-worker | - | Sync scheduler |
+| workflow-worker | st-workflow-worker | - | Workflow engine |
+| monitoring-agent | st-monitoring-agent | - | Self-healing agent |
 
 ---
 
-### Pricebook Module (`/pricebook`) - 40 endpoints
+## Database
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/pricebook/services` | List services |
-| GET | `/pricebook/services/:id` | Get service by ID |
-| POST | `/pricebook/services` | Create service |
-| PATCH | `/pricebook/services/:id` | Update service |
-| DELETE | `/pricebook/services/:id` | Delete service |
-| GET | `/pricebook/materials` | List materials |
-| GET | `/pricebook/equipment` | List equipment |
-| GET | `/pricebook/categories` | List categories |
-| GET | `/pricebook/discounts-and-fees` | List discounts/fees |
-| POST | `/pricebook/bulk/import` | Bulk import |
-| GET | `/pricebook/bulk/export` | Bulk export |
+### Connection
 
----
-
-### Payroll Module (`/payroll`) - 34 endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/payroll/timesheets` | List timesheets |
-| GET | `/payroll/timesheet-codes` | List timesheet codes |
-| GET | `/payroll/job-splits` | List job splits |
-| GET | `/payroll/gross-pay-items` | List gross pay items |
-| GET | `/payroll/payroll-adjustments` | List payroll adjustments |
-| GET | `/payroll/payrolls` | List payrolls |
-| GET | `/payroll/activity-codes` | List activity codes |
-
----
-
-### Settings Module (`/settings`) - 20 endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/settings/employees` | List employees |
-| GET | `/settings/employees/:id` | Get employee by ID |
-| POST | `/settings/employees` | Create employee |
-| PATCH | `/settings/employees/:id` | Update employee |
-| GET | `/settings/technicians` | List technicians |
-| GET | `/settings/business-units` | List business units |
-| GET | `/settings/user-roles` | List user roles |
-| GET | `/settings/tag-types` | List tag types |
-
----
-
-### Inventory Module (`/inventory`) - 47 endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/inventory/adjustments` | List adjustments |
-| GET | `/inventory/purchase-orders` | List purchase orders |
-| POST | `/inventory/purchase-orders` | Create purchase order |
-| GET | `/inventory/receipts` | List receipts |
-| GET | `/inventory/returns` | List returns |
-| GET | `/inventory/transfers` | List transfers |
-| GET | `/inventory/trucks` | List trucks |
-| GET | `/inventory/vendors` | List vendors |
-| GET | `/inventory/warehouses` | List warehouses |
-
----
-
-### JPM Extended Module (`/jpm`) - 69 endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/jpm/appointments` | List appointments |
-| GET | `/jpm/appointments/:id` | Get appointment by ID |
-| POST | `/jpm/appointments` | Create appointment |
-| POST | `/jpm/appointments/:id/cancel` | Cancel appointment |
-| POST | `/jpm/appointments/:id/hold` | Hold appointment |
-| POST | `/jpm/appointments/:id/reschedule` | Reschedule appointment |
-| GET | `/jpm/budget-codes` | List budget codes |
-| GET | `/jpm/job-types` | List job types |
-| GET | `/jpm/job-cancel-reasons` | List cancel reasons |
-| GET | `/jpm/job-hold-reasons` | List hold reasons |
-| GET | `/jpm/projects` | List projects |
-| GET | `/jpm/project-statuses` | List project statuses |
-| GET | `/jpm/project-types` | List project types |
-
----
-
-### Marketing Module (`/marketing`) - 19 endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/marketing/categories` | List campaign categories |
-| GET | `/marketing/campaigns` | List campaigns |
-| POST | `/marketing/campaigns` | Create campaign |
-| GET | `/marketing/campaign-costs` | List campaign costs |
-| GET | `/marketing/campaign-cost-summary` | Get cost summary |
-| GET | `/marketing/suppressions` | List suppressions |
-
----
-
-### Marketing Ads Module (`/marketing-ads`) - 7 endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/marketing-ads/attributed-leads` | List attributed leads |
-| GET | `/marketing-ads/performance` | Get performance data |
-| GET | `/marketing-ads/scheduled-job-attributions` | List job attributions |
-| GET | `/marketing-ads/web-booking-attributions` | List web bookings |
-| POST | `/marketing-ads/external-call-attributions` | Create call attribution |
-
----
-
-### Forms Module (`/forms`) - 5 endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/forms/forms` | List forms |
-| GET | `/forms/forms/:id` | Get form by ID |
-| GET | `/forms/form-submissions` | List form submissions |
-| GET | `/forms/jobs/:jobId/forms` | Get job forms |
-
----
-
-### Reporting Module (`/reporting`) - 5 endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/reporting/report-categories` | List report categories |
-| GET | `/reporting/report-categories/:id` | Get category by ID |
-| GET | `/reporting/report-categories/:id/reports` | List category reports |
-| GET | `/reporting/dynamic-value-sets/:id` | Get dynamic value set |
-
----
-
-### Task Management Module (`/task-management`) - 5 endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/task-management/data` | Get task data |
-| GET | `/task-management/tasks` | List tasks |
-| GET | `/task-management/tasks/:id` | Get task by ID |
-| POST | `/task-management/tasks` | Create task |
-| PATCH | `/task-management/tasks/:id` | Update task |
-
----
-
-### Telecom Module (`/telecom`) - 10 endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/telecom/calls` | List calls |
-| GET | `/telecom/calls/:id` | Get call by ID |
-| GET | `/telecom/calls/export` | Export calls |
-| GET | `/telecom/opt-in-out` | List opt in/out |
-| POST | `/telecom/opt-in-out` | Create opt in/out |
-
----
-
-### Timesheets Module (`/timesheets`) - 12 endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/timesheets/activities` | List activities |
-| GET | `/timesheets/activities/:id` | Get activity by ID |
-| POST | `/timesheets/activities` | Create activity |
-| PATCH | `/timesheets/activities/:id` | Update activity |
-| DELETE | `/timesheets/activities/:id` | Delete activity |
-| GET | `/timesheets/activity-categories` | List activity categories |
-| GET | `/timesheets/activity-types` | List activity types |
-
----
-
-### Equipment Systems Module (`/equipment`) - 8 endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/equipment/installed-equipment` | List installed equipment |
-| GET | `/equipment/installed-equipment/:id` | Get equipment by ID |
-| POST | `/equipment/installed-equipment` | Create equipment |
-| PATCH | `/equipment/installed-equipment/:id` | Update equipment |
-| DELETE | `/equipment/installed-equipment/:id` | Delete equipment |
-
----
-
-### Job Booking Module (`/jbce`) - 1 endpoint
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/jbce/call-reasons` | List call reasons |
-
----
-
-### Pricebook Sync Engine (`/api/sync/pricebook`)
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/sync/pricebook/status` | Get sync status, stats, and scheduler info |
-| GET | `/api/sync/pricebook/logs` | Get sync history logs |
-| GET | `/api/sync/pricebook/conflicts` | Get unresolved sync conflicts |
-| POST | `/api/sync/pricebook/full` | Trigger full sync |
-| POST | `/api/sync/pricebook/incremental` | Trigger incremental sync |
-| POST | `/api/sync/pricebook/conflicts/:id/resolve` | Resolve a conflict |
-
----
-
-### AI Chat Agent (`/chat/pricebook`)
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/chat/pricebook` | Send message to chat agent |
-| GET | `/chat/pricebook/health` | Chat agent health status |
-
-**Chat Request Body:**
-```json
-{
-  "sessionId": "unique-session-id",
-  "message": "search for transformer"
-}
+```
+Host: postgres (Docker) / localhost:6432 (external)
+Database: perfectcatch_automation
+User: postgres
 ```
 
-**Supported Intents:**
-- Browse & Search: "show me pool materials", "search transformer"
-- Create Items: "create a material called Test Part"
-- Update Items: "update price of EMT to $5.99"
-- **Job Estimates**: "start estimate for job 12345", "add chlorinator hookup", "show estimate", "create estimate"
+### Database Migrations
+
+| Migration | Description |
+|-----------|-------------|
+| `001_pricebook_schema.sql` | Pricebook tables |
+| `002_servicetitan_complete.sql` | Core ST entities |
+| `003_workflow_engine.sql` | Workflow definitions & instances |
+| `004_callrail_tracking.sql` | Call tracking |
+| `005_messaging_system.sql` | SMS/Email messaging |
+| `006_ghl_and_employees.sql` | GHL integration |
+| `007_sync_enrichment.sql` | Sync metadata |
+| `008_ghl_sync_controls.sql` | GHL sync controls |
+| `009_scheduling_schema.sql` | Scheduling module |
+
+### Key Tables
+
+| Table | Description |
+|-------|-------------|
+| `st_customers` | ServiceTitan customers |
+| `st_jobs` | ServiceTitan jobs |
+| `st_estimates` | ServiceTitan estimates |
+| `st_invoices` | ServiceTitan invoices |
+| `workflow_definitions` | Workflow templates |
+| `workflow_instances` | Active workflows |
+| `ghl_opportunities` | GHL opportunities |
+| `ghl_contacts` | GHL contacts |
+| `messaging_log` | Message delivery log |
+
+### Scheduling Module Tables
+
+| Table | Description |
+|-------|-------------|
+| `scheduling_technicians` | Synced technicians |
+| `scheduling_teams` | Synced teams |
+| `scheduling_zones` | Synced zones |
+| `scheduling_job_types` | Synced job types |
+| `scheduling_technician_skills` | Local skill assignments |
+| `scheduling_job_profiles` | Job duration/skill profiles |
+| `scheduling_zone_travel_times` | Zone travel estimates |
+| `scheduling_rules` | Business rules engine |
+| `scheduling_capacity_cache` | Capacity cache (15-min TTL) |
+| `scheduling_availability_cache` | Availability cache |
+| `scheduling_audit_log` | Scheduling audit trail |
 
 ---
 
-### n8n Webhook Integration (`/api/n8n`)
+## MCP Server (Claude Integration)
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/n8n/events` | List available webhook events |
-| POST | `/api/n8n/subscribe` | Subscribe to events |
-| GET | `/api/n8n/subscriptions` | List active subscriptions |
-| DELETE | `/api/n8n/subscriptions/:id` | Unsubscribe |
-| POST | `/api/n8n/webhook` | Receive/process n8n webhooks |
+The MCP Server provides **95 AI tools** across 12 categories for Claude Desktop integration.
 
-**Available Events:**
-- `material_created`, `material_updated`, `material_deleted`
-- `service_created`, `service_updated`, `service_deleted`
-- `category_created`
-- `sync_started`, `sync_completed`, `sync_failed`
-- `conflict_detected`, `conflict_resolved`
+### Tool Categories
 
----
+| Category | Tools | Description |
+|----------|-------|-------------|
+| **Estimates** | 15 | AI estimation, pricebook search, quote building |
+| **Customers** | 8 | Customer intelligence, segmentation, insights |
+| **Scheduling** | 12 | Smart scheduling, route optimization, dispatch |
+| **Jobs** | 10 | Job management, status, profitability |
+| **Invoicing** | 6 | Invoice creation, payments, collections |
+| **Analytics** | 8 | KPIs, revenue, forecasting, trends |
+| **Messaging** | 6 | SMS, email, campaigns, templates |
+| **Workflows** | 7 | Automation, triggers, workflow control |
+| **Equipment** | 5 | Equipment tracking, maintenance prediction |
+| **Technicians** | 6 | Field tech tools, schedule, parts lookup |
+| **Integrations** | 4 | QuickBooks, GHL, webhooks |
+| **AI/NLP** | 8 | Entity extraction, intent detection, NLP |
 
-## Example Usage
+### Claude Desktop Setup
 
-### cURL Examples
-
-```bash
-# Health check
-curl http://localhost:3001/ping
-
-# List jobs with pagination
-curl "http://localhost:3001/jobs?page=1&pageSize=50"
-
-# Get customer by ID
-curl http://localhost:3001/customers/12345
-
-# Get customers created in the last 7 days
-# Replace dates with actual ISO 8601 timestamps
-curl "http://localhost:3001/customers?createdOnOrAfter=2025-11-24T00:00:00.000Z&createdOnOrBefore=2025-12-01T23:59:59.999Z&page=1&pageSize=50"
-
-# Dynamic: Get customers from last 7 days (using shell date command)
-curl "http://localhost:3001/customers?createdOnOrAfter=$(date -u -v-7d +%Y-%m-%dT00:00:00.000Z)&createdOnOrBefore=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)&page=1&pageSize=50"
-
-# Create estimate (POST with body)
-curl -X POST http://localhost:3001/estimates \
-  -H "Content-Type: application/json" \
-  -d '{"jobId": 123, "name": "New Estimate"}'
-```
-
-### Get Recent Customers Script
-
-A dedicated script to fetch customers created in the last N days:
-
-```bash
-# Get customers from last 7 days (default)
-npm run recent-customers
-
-# Or run directly with custom parameters
-node scripts/get-recent-customers.js http://localhost:3001 7
-
-# Get customers from last 30 days
-node scripts/get-recent-customers.js http://localhost:3001 30
-```
-
-### n8n HTTP Request Node
-
-```json
-{
-  "url": "http://localhost:3001/jobs",
-  "method": "GET",
-  "queryParameters": {
-    "page": 1,
-    "pageSize": 50,
-    "createdOnOrAfter": "2024-01-01"
-  }
-}
-```
-
-### Chat Agent Examples
-
-```bash
-# Start an estimate for a job
-curl -X POST http://localhost:3001/chat/pricebook \
-  -H "Content-Type: application/json" \
-  -d '{"sessionId": "my-session", "message": "Start estimate for job 12345"}'
-
-# Add items to estimate
-curl -X POST http://localhost:3001/chat/pricebook \
-  -H "Content-Type: application/json" \
-  -d '{"sessionId": "my-session", "message": "Add chlorinator hookup and transformer"}'
-
-# Show current estimate
-curl -X POST http://localhost:3001/chat/pricebook \
-  -H "Content-Type: application/json" \
-  -d '{"sessionId": "my-session", "message": "Show estimate"}'
-
-# Search pricebook
-curl -X POST http://localhost:3001/chat/pricebook \
-  -H "Content-Type: application/json" \
-  -d '{"sessionId": "my-session", "message": "Search for pool pump"}'
-```
-
-### Pricebook Sync Examples
-
-```bash
-# Get sync status
-curl http://localhost:3001/api/sync/pricebook/status
-
-# Trigger full sync
-curl -X POST http://localhost:3001/api/sync/pricebook/full
-
-# Get sync logs
-curl http://localhost:3001/api/sync/pricebook/logs
-```
-
-### n8n Webhook Examples
-
-```bash
-# List available events
-curl http://localhost:3001/api/n8n/events
-
-# Subscribe to events
-curl -X POST http://localhost:3001/api/n8n/subscribe \
-  -H "Content-Type: application/json" \
-  -d '{"webhookUrl": "http://n8n:5678/webhook/test", "events": ["material_created", "sync_completed"]}'
-
-# List subscriptions
-curl http://localhost:3001/api/n8n/subscriptions
-```
-
-## Deployment
-
-### Using PM2
-
-```bash
-# Install PM2 globally
-npm install -g pm2
-
-# Start with PM2
-pm2 start ecosystem.config.cjs
-
-# Save PM2 process list
-pm2 save
-
-# Setup PM2 startup script
-pm2 startup
-```
-
-### Using Docker
-
-```bash
-# Build image
-docker build -t perfect-catch-st-automation .
-
-# Run container
-docker run -d \
-  --name st-automation \
-  -p 3001:3001 \
-  --env-file .env \
-  perfect-catch-st-automation
-```
-
-### Using Docker Compose
-
-```bash
-# Basic deployment
-docker-compose up -d
-
-# Full stack with PostgreSQL (for pricebook sync)
-docker-compose -f docker-compose.pricebook.yml up -d
-```
-
-### Full Stack Deployment (Pricebook Engine)
-
-The pricebook engine requires PostgreSQL. Use the full stack deployment:
-
-```bash
-# Start all services
-docker-compose -f docker-compose.pricebook.yml up -d
-
-# Connect to pricebook network
-docker network connect pricebook-net perfect-catch-st-automation
-
-# Populate database from ServiceTitan
-docker exec perfect-catch-st-automation node scripts/populate-pricebook-db.js
-```
-
-**Services included:**
-- `st-automation` - Main API server (port 3001)
-- `pricebook-postgres` - PostgreSQL database (port 5432)
-- `redis` - Redis cache (port 6379)
-
-## Open WebUI Integration
-
-A ready-to-use tool for Open WebUI is available at `openwebui/pricebook_tool.py`.
-
-1. Go to Open WebUI → Workspace → Tools
-2. Create new tool and paste the contents of `pricebook_tool.py`
-3. Enable the tool in your chat
-
-**Available functions:**
-- `search_pricebook(query)` - Natural language search
-- `get_pricebook_categories()` - List all categories
-- `get_pricebook_status()` - Database statistics
-
-## 🆕 MCP Server (Model Context Protocol)
-
-An MCP server is available for integration with Claude Desktop and other MCP-compatible AI assistants.
-
-### Installation
-
-```bash
-# Python version (recommended)
-cd mcp-server
-pip install -r requirements.txt
-
-# Node.js version
-cd mcp-server
-npm install
-```
-
-### Claude Desktop Configuration
-
-Add to your Claude Desktop config:
+Add to `~/.config/claude/claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
-    "pricebook": {
-      "command": "python",
-      "args": ["/path/to/mcp-server/pricebook_mcp.py"],
+    "perfectcatch": {
+      "command": "node",
+      "args": ["/path/to/mcp-server/index.js"],
       "env": {
-        "PRICEBOOK_API_URL": "http://localhost:3001"
+        "DATABASE_URL": "postgresql://...",
+        "ANTHROPIC_API_KEY": "sk-..."
       }
     }
   }
 }
 ```
 
-### Available Tools (20+)
+---
 
-| Category | Tools |
-|----------|-------|
-| **Search** | `search_pricebook`, `list_categories`, `get_materials`, `get_services`, `get_equipment` |
-| **Estimates** | `start_estimate`, `add_to_estimate`, `show_estimate`, `remove_from_estimate`, `create_estimate`, `clear_estimate` |
-| **Updates** | `update_service`, `update_material`, `get_service_details`, `get_material_details` |
-| **Sync** | `get_sync_status`, `trigger_sync`, `get_sync_logs` |
-| **Webhooks** | `list_webhook_events`, `list_webhook_subscriptions`, `subscribe_webhook` |
-| **Chat** | `chat` (natural language) |
+## Slack Integration
 
-See `mcp-server/README.md` for full documentation.
+### Supported Slash Commands
 
-## Error Response Format
+| Command | Description |
+|---------|-------------|
+| `/quote [description]` | Generate estimate from description |
+| `/schedule` | Check technician availability |
+| `/customer [search]` | Search customers |
+| `/revenue [period]` | Revenue for today/week/month |
+| `/status` | System status |
+| `/jobs [status]` | List jobs by status |
+| `/techs` | List technicians |
 
-All errors return a consistent JSON structure:
+### Event Support
 
-```json
-{
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Human-readable error message",
-    "details": {}
-  }
-}
-```
+- **App Mentions** - Respond when @mentioned in channels
+- **Direct Messages** - Handle DMs to the bot
+- **Interactive Components** - Buttons, modals, select menus
+
+---
+
+## Scheduling Module
+
+### Hybrid Architecture
+
+The scheduling module uses a hybrid approach:
+
+1. **Reference Data (Synced)**: Technicians, teams, zones, job types from ServiceTitan
+2. **Intelligence Data (Local)**: Skills, certifications, travel times, scheduling rules
+3. **Cache Tables (15-min TTL)**: Capacity and availability data
+4. **Real-Time API**: Jobs/appointments fetched live from ServiceTitan
+
+### Default Scheduling Rules
+
+| Rule | Type | Priority | Description |
+|------|------|----------|-------------|
+| `skill_match_required` | Constraint | 100 | Tech must have required skills |
+| `certification_valid` | Constraint | 95 | Certifications must not be expired |
+| `zone_preference` | Preference | 70 | Prefer techs assigned to job zone |
+| `minimize_travel` | Optimization | 60 | Optimize for minimal travel time |
+| `workload_balance` | Optimization | 40 | Balance jobs across techs |
+
+### Sync Schedule
+
+- **Full Sync**: Daily at 3:00 AM
+- **Incremental Sync**: Every 4 hours
+
+---
 
 ## License
 
 Proprietary - Perfect Catch Electric & Pools
-
-## Support
-
-For issues or questions, contact the development team.
