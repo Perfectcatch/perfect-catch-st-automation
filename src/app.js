@@ -26,6 +26,8 @@ const app = express();
 
 let syncEngine = null;
 let syncScheduler = null;
+let schedulingSyncEngine = null;
+let schedulingSyncScheduler = null;
 
 /**
  * Initialize optional pricebook sync engine
@@ -53,7 +55,7 @@ async function initializeOptionalEngines() {
     const prisma = getPrismaClient();
     const stClient = { stRequest };
 
-    // Try to load sync engine (optional)
+    // Try to load pricebook sync engine (optional)
     try {
       const { PricebookSyncEngine, SyncScheduler, createSyncRouter } = await import('./sync/pricebook/index.js');
       syncEngine = new PricebookSyncEngine(prisma, stClient);
@@ -62,13 +64,31 @@ async function initializeOptionalEngines() {
       });
       app.set('syncEngine', syncEngine);
       app.set('syncScheduler', syncScheduler);
-      
+
       if (process.env.SYNC_SCHEDULER_ENABLED !== 'false') {
         syncScheduler.start();
       }
       logger.info('Pricebook sync engine initialized');
     } catch (e) {
-      logger.debug('Sync engine modules not available (optional)');
+      logger.debug('Pricebook sync engine modules not available (optional)');
+    }
+
+    // Try to load scheduling sync engine (optional)
+    try {
+      const { SchedulingSyncEngine, SchedulingSyncScheduler, createSchedulingSyncRouter } = await import('./sync/scheduling/index.js');
+      schedulingSyncEngine = new SchedulingSyncEngine(stClient);
+      schedulingSyncScheduler = new SchedulingSyncScheduler(schedulingSyncEngine, {
+        enabled: process.env.SCHEDULING_SYNC_ENABLED !== 'false',
+      });
+      app.set('schedulingSyncEngine', schedulingSyncEngine);
+      app.set('schedulingSyncScheduler', schedulingSyncScheduler);
+
+      if (process.env.SCHEDULING_SYNC_ENABLED !== 'false') {
+        schedulingSyncScheduler.start();
+      }
+      logger.info('Scheduling sync engine initialized');
+    } catch (e) {
+      logger.debug('Scheduling sync engine modules not available (optional)');
     }
 
     // Try to load n8n integration (optional)
@@ -167,6 +187,27 @@ app.use('/api/sync/pricebook', async (req, res, next) => {
     syncRouter(req, res, next);
   } catch (e) {
     return res.status(503).json({ success: false, error: 'Sync module not available' });
+  }
+});
+
+// Mount scheduling sync routes (conditionally - requires scheduling sync engine)
+app.use('/api/sync/scheduling', async (req, res, next) => {
+  const schedulingSyncEngine = app.get('schedulingSyncEngine');
+  const schedulingSyncScheduler = app.get('schedulingSyncScheduler');
+
+  if (!schedulingSyncEngine || !schedulingSyncScheduler) {
+    return res.status(503).json({
+      success: false,
+      error: 'Scheduling sync engine not initialized. Check DATABASE_URL configuration.',
+    });
+  }
+
+  try {
+    const { createSchedulingSyncRouter } = await import('./sync/scheduling/index.js');
+    const schedulingSyncRouter = createSchedulingSyncRouter(schedulingSyncEngine, schedulingSyncScheduler);
+    schedulingSyncRouter(req, res, next);
+  } catch (e) {
+    return res.status(503).json({ success: false, error: 'Scheduling sync module not available' });
   }
 });
 

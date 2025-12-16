@@ -41,6 +41,24 @@ import timesheetsRoutes from './timesheets.routes.js';
 // Chat routes
 import pricebookChatRoutes from './pricebook-chat.routes.js';
 
+// Image proxy routes
+import imagesRoutes from './images.routes.js';
+
+// Scraper routes
+import scrapersRoutes from './scrapers.routes.js';
+
+// VAPI routes (voice AI integration)
+import vapiRoutes from './vapi.routes.js';
+
+// Database sync routes (PostgreSQL job sync)
+import dbSyncRoutes from './db-sync.routes.js';
+
+// Slack integration routes
+import slackRoutes from './slack.routes.js';
+
+// Scheduling routes (hybrid architecture)
+import schedulingRoutes from './scheduling.routes.js';
+
 const router = Router();
 
 // ═══════════════════════════════════════════════════════════════
@@ -84,5 +102,35 @@ router.use('/timesheets', timesheetsRoutes);
 // CHAT ROUTES (AI-powered conversational interface)
 // ═══════════════════════════════════════════════════════════════
 router.use('/chat', pricebookChatRoutes);
+
+// ═══════════════════════════════════════════════════════════════
+// IMAGE PROXY ROUTES (serves ST images from our domain)
+// ═══════════════════════════════════════════════════════════════
+router.use('/images', imagesRoutes);
+
+// ═══════════════════════════════════════════════════════════════
+// SCRAPER ROUTES (vendor price scraping)
+// ═══════════════════════════════════════════════════════════════
+router.use('/scrapers', scrapersRoutes);
+
+// ═══════════════════════════════════════════════════════════════
+// VAPI ROUTES (voice AI integration for real-time availability)
+// ═══════════════════════════════════════════════════════════════
+router.use('/vapi', vapiRoutes);
+
+// ═══════════════════════════════════════════════════════════════
+// DATABASE SYNC ROUTES (PostgreSQL job sync - replaces Airtable)
+// ═══════════════════════════════════════════════════════════════
+router.use('/db', dbSyncRoutes);
+
+// ═══════════════════════════════════════════════════════════════
+// SLACK INTEGRATION ROUTES (Batch 9 - conversational bot, commands)
+// ═══════════════════════════════════════════════════════════════
+router.use('/slack', slackRoutes);
+
+// ═══════════════════════════════════════════════════════════════
+// SCHEDULING ROUTES (hybrid architecture: cached + real-time)
+// ═══════════════════════════════════════════════════════════════
+router.use('/scheduling', schedulingRoutes);
 
 export default router;
