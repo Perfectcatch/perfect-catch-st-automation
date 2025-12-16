@@ -1,13 +1,22 @@
 #!/usr/bin/env node
 /**
- * Pricebook MCP Server
+ * Perfect Catch MCP Server - Complete Edition
  * 
- * Model Context Protocol server exposing ServiceTitan Pricebook Engine capabilities.
- * Provides tools for:
- * - Searching pricebook (materials, services, equipment)
- * - Building job estimates
- * - Managing sync operations
- * - n8n webhook integration
+ * Model Context Protocol server with 57 AI-powered tools for field service automation.
+ * 
+ * Tool Categories:
+ * - Estimates (15 tools)
+ * - Customers (8 tools)
+ * - Scheduling (15 tools)
+ * - Jobs (10 tools)
+ * - Invoicing (6 tools)
+ * - Analytics (8 tools)
+ * - Messaging (6 tools)
+ * - Workflows (7 tools)
+ * - Equipment (5 tools)
+ * - Technicians (6 tools)
+ * - Integrations (4 tools)
+ * - AI/NLP (8 tools)
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -19,12 +28,34 @@ import {
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 
+// Import existing tools
+import * as queryDatabaseTool from './tools/query-database.js';
+import * as callStApiTool from './tools/call-st-api.js';
+import * as sendSmsTool from './tools/send-sms.js';
+import * as sendEmailTool from './tools/send-email.js';
+import * as createJobTool from './tools/create-job.js';
+import * as scheduleAppointmentTool from './tools/schedule-appointment.js';
+
+// Import new tool categories
+import * as estimateTools from './tools/estimates/index.js';
+import * as customerTools from './tools/customers/index.js';
+import * as schedulingTools from './tools/scheduling/index.js';
+import * as jobTools from './tools/jobs/index.js';
+import * as invoicingTools from './tools/invoicing/index.js';
+import * as analyticsTools from './tools/analytics/index.js';
+import * as messagingTools from './tools/messaging/index.js';
+import * as workflowTools from './tools/workflows/index.js';
+import * as equipmentTools from './tools/equipment/index.js';
+import * as technicianTools from './tools/technicians/index.js';
+import * as integrationTools from './tools/integrations/index.js';
+import * as aiTools from './tools/ai/index.js';
+
 // Configuration
 const API_BASE_URL = process.env.PRICEBOOK_API_URL || 'http://localhost:3001';
 const DEFAULT_SESSION_ID = process.env.MCP_SESSION_ID || 'mcp-default-session';
 
 /**
- * Make HTTP request to the Pricebook API
+ * Make HTTP request to the API
  */
 async function apiRequest(endpoint, options = {}) {
   const url = `${API_BASE_URL}${endpoint}`;
@@ -35,7 +66,6 @@ async function apiRequest(endpoint, options = {}) {
     },
     ...options,
   });
-  
   return response.json();
 }
 
@@ -52,8 +82,8 @@ async function chatWithAgent(sessionId, message) {
 // Create MCP Server
 const server = new Server(
   {
-    name: 'pricebook-mcp-server',
-    version: '1.0.0',
+    name: 'perfectcatch-mcp-server',
+    version: '2.0.0',
   },
   {
     capabilities: {
@@ -64,32 +94,69 @@ const server = new Server(
 );
 
 // ============================================
-// TOOLS
+// TOOL DEFINITIONS
 // ============================================
 
-const TOOLS = [
-  // Chat/Search Tools
+// Collect all tools from imported modules
+function collectTools(module) {
+  return Object.values(module).filter(t => t && t.name && t.inputSchema && t.handler);
+}
+
+const ALL_TOOLS = [
+  // Estimate Tools (15)
+  ...collectTools(estimateTools),
+  
+  // Customer Tools (8)
+  ...collectTools(customerTools),
+  
+  // Scheduling Tools (12)
+  ...collectTools(schedulingTools),
+  
+  // Job Tools (10)
+  ...collectTools(jobTools),
+  
+  // Invoicing Tools (6)
+  ...collectTools(invoicingTools),
+  
+  // Analytics Tools (8)
+  ...collectTools(analyticsTools),
+  
+  // Messaging Tools (6)
+  ...collectTools(messagingTools),
+  
+  // Workflow Tools (7)
+  ...collectTools(workflowTools),
+  
+  // Equipment Tools (5)
+  ...collectTools(equipmentTools),
+  
+  // Technician Tools (6)
+  ...collectTools(technicianTools),
+  
+  // Integration Tools (4)
+  ...collectTools(integrationTools),
+  
+  // AI/NLP Tools (8)
+  ...collectTools(aiTools),
+];
+
+// Legacy tools (keep for backwards compatibility)
+const LEGACY_TOOLS = [
   {
-    name: 'search_pricebook',
-    description: 'Search the ServiceTitan pricebook for materials, services, and equipment. Returns matching items with prices.',
+    name: 'search_pricebook_legacy',
+    description: 'Legacy: Search the ServiceTitan pricebook for materials, services, and equipment.',
     inputSchema: {
       type: 'object',
       properties: {
-        query: {
-          type: 'string',
-          description: 'Search query (e.g., "transformer", "pool pump", "breaker")',
-        },
+        query: { type: 'string', description: 'Search query' },
       },
       required: ['query'],
     },
   },
   {
     name: 'list_categories',
-    description: 'List all pricebook categories. Use this to see what categories are available.',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-    },
+    description: 'List all pricebook categories.',
+    inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'get_materials',
@@ -97,14 +164,8 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        category: {
-          type: 'string',
-          description: 'Category name to filter by (optional)',
-        },
-        limit: {
-          type: 'number',
-          description: 'Maximum number of results (default: 25)',
-        },
+        category: { type: 'string', description: 'Category name to filter by' },
+        limit: { type: 'number', description: 'Maximum results (default: 25)' },
       },
     },
   },
@@ -114,14 +175,8 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        category: {
-          type: 'string',
-          description: 'Category name to filter by (optional)',
-        },
-        limit: {
-          type: 'number',
-          description: 'Maximum number of results (default: 25)',
-        },
+        category: { type: 'string', description: 'Category name to filter by' },
+        limit: { type: 'number', description: 'Maximum results (default: 25)' },
       },
     },
   },
@@ -131,125 +186,14 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        limit: {
-          type: 'number',
-          description: 'Maximum number of results (default: 25)',
-        },
+        limit: { type: 'number', description: 'Maximum results (default: 25)' },
       },
     },
   },
-
-  // Estimate Building Tools
-  {
-    name: 'start_estimate',
-    description: 'Start a new estimate for a job. Use job ID or job name.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        jobId: {
-          type: 'string',
-          description: 'ServiceTitan job ID (e.g., "12345")',
-        },
-        jobName: {
-          type: 'string',
-          description: 'Job name/description (e.g., "Smith pool installation")',
-        },
-        sessionId: {
-          type: 'string',
-          description: 'Session ID for tracking (optional, auto-generated if not provided)',
-        },
-      },
-    },
-  },
-  {
-    name: 'add_to_estimate',
-    description: 'Add items to the current estimate. Items are searched by name or code.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        items: {
-          type: 'string',
-          description: 'Items to add (e.g., "chlorinator hookup and transformer")',
-        },
-        sessionId: {
-          type: 'string',
-          description: 'Session ID (use same as start_estimate)',
-        },
-      },
-      required: ['items'],
-    },
-  },
-  {
-    name: 'show_estimate',
-    description: 'Show the current estimate with all items and total.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        sessionId: {
-          type: 'string',
-          description: 'Session ID',
-        },
-      },
-    },
-  },
-  {
-    name: 'remove_from_estimate',
-    description: 'Remove an item from the current estimate.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        item: {
-          type: 'string',
-          description: 'Item name or number to remove',
-        },
-        sessionId: {
-          type: 'string',
-          description: 'Session ID',
-        },
-      },
-      required: ['item'],
-    },
-  },
-  {
-    name: 'create_estimate',
-    description: 'Create/push the estimate to ServiceTitan. Requires confirmation.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        confirm: {
-          type: 'boolean',
-          description: 'Set to true to confirm creation',
-        },
-        sessionId: {
-          type: 'string',
-          description: 'Session ID',
-        },
-      },
-      required: ['confirm'],
-    },
-  },
-  {
-    name: 'clear_estimate',
-    description: 'Clear the current estimate and start fresh.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        sessionId: {
-          type: 'string',
-          description: 'Session ID',
-        },
-      },
-    },
-  },
-
-  // Sync Tools
   {
     name: 'get_sync_status',
-    description: 'Get the current pricebook sync status, statistics, and scheduler info.',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-    },
+    description: 'Get the current pricebook sync status.',
+    inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'trigger_sync',
@@ -257,335 +201,89 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        type: {
-          type: 'string',
-          enum: ['full', 'incremental'],
-          description: 'Type of sync to trigger',
-        },
+        type: { type: 'string', enum: ['full', 'incremental'], description: 'Type of sync' },
       },
       required: ['type'],
     },
   },
-  {
-    name: 'get_sync_logs',
-    description: 'Get recent sync operation logs.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        limit: {
-          type: 'number',
-          description: 'Number of logs to return (default: 10)',
-        },
-      },
-    },
-  },
+  // Database and API tools
+  queryDatabaseTool.definition,
+  callStApiTool.definition,
+  sendSmsTool.definition,
+  sendEmailTool.definition,
+  createJobTool.definition,
+  scheduleAppointmentTool.definition,
+].filter(Boolean);
 
-  // ServiceTitan Direct Access
-  {
-    name: 'get_service_details',
-    description: 'Get detailed information about a specific service including linked materials.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        serviceId: {
-          type: 'string',
-          description: 'Service ID',
-        },
-      },
-      required: ['serviceId'],
-    },
-  },
-  {
-    name: 'get_material_details',
-    description: 'Get detailed information about a material including vendor pricing.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        materialId: {
-          type: 'string',
-          description: 'Material ID',
-        },
-      },
-      required: ['materialId'],
-    },
-  },
-  {
-    name: 'update_service',
-    description: 'Update a service in ServiceTitan (price, materials, etc.).',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        serviceId: {
-          type: 'string',
-          description: 'Service ID to update',
-        },
-        price: {
-          type: 'number',
-          description: 'New price',
-        },
-        memberPrice: {
-          type: 'number',
-          description: 'New member price',
-        },
-        addOnPrice: {
-          type: 'number',
-          description: 'New add-on price',
-        },
-      },
-      required: ['serviceId'],
-    },
-  },
-  {
-    name: 'update_material',
-    description: 'Update a material in ServiceTitan.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        materialId: {
-          type: 'string',
-          description: 'Material ID to update',
-        },
-        price: {
-          type: 'number',
-          description: 'New price',
-        },
-        cost: {
-          type: 'number',
-          description: 'New cost',
-        },
-      },
-      required: ['materialId'],
-    },
-  },
+// Combine all tools
+const COMBINED_TOOLS = [...ALL_TOOLS, ...LEGACY_TOOLS];
 
-  // n8n Integration
-  {
-    name: 'list_webhook_events',
-    description: 'List available webhook events for n8n integration.',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-    },
-  },
-  {
-    name: 'list_webhook_subscriptions',
-    description: 'List active webhook subscriptions.',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-    },
-  },
-  {
-    name: 'subscribe_webhook',
-    description: 'Subscribe to webhook events.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        webhookUrl: {
-          type: 'string',
-          description: 'URL to receive webhook events',
-        },
-        events: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Events to subscribe to (e.g., ["material_created", "sync_completed"])',
-        },
-        name: {
-          type: 'string',
-          description: 'Name for this subscription',
-        },
-      },
-      required: ['webhookUrl', 'events'],
-    },
-  },
+// Create tool map for handler lookup
+const TOOL_MAP = {};
+ALL_TOOLS.forEach(tool => {
+  TOOL_MAP[tool.name] = tool;
+});
 
-  // Chat Agent (Natural Language)
-  {
-    name: 'chat',
-    description: 'Send a natural language message to the pricebook chat agent. Supports complex queries and conversations.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        message: {
-          type: 'string',
-          description: 'Natural language message (e.g., "What pool pump parts do you have under $200?")',
-        },
-        sessionId: {
-          type: 'string',
-          description: 'Session ID for conversation context',
-        },
-      },
-      required: ['message'],
-    },
-  },
-];
+// Add legacy tool handlers
+TOOL_MAP['query_database'] = queryDatabaseTool;
+TOOL_MAP['call_st_api'] = callStApiTool;
+TOOL_MAP['send_sms'] = sendSmsTool;
+TOOL_MAP['send_email'] = sendEmailTool;
+TOOL_MAP['create_job'] = createJobTool;
+TOOL_MAP['schedule_appointment'] = scheduleAppointmentTool;
 
 // List Tools Handler
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return { tools: TOOLS };
+  const tools = COMBINED_TOOLS.map(tool => ({
+    name: tool.name,
+    description: tool.description,
+    inputSchema: tool.inputSchema,
+  }));
+  
+  console.error(`MCP Server: Listing ${tools.length} tools`);
+  return { tools };
 });
 
 // Call Tool Handler
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
-  const sessionId = args?.sessionId || DEFAULT_SESSION_ID;
-
+  
+  console.error(`MCP Server: Calling tool ${name}`);
+  
   try {
-    let result;
-
-    switch (name) {
-      // Search/Query Tools
-      case 'search_pricebook':
-        result = await chatWithAgent(sessionId, `search ${args.query}`);
-        break;
-
-      case 'list_categories':
-        result = await chatWithAgent(sessionId, 'show categories');
-        break;
-
-      case 'get_materials':
-        if (args.category) {
-          result = await chatWithAgent(sessionId, `show ${args.category} materials`);
-        } else {
-          result = await apiRequest(`/pricebook/materials?pageSize=${args.limit || 25}`);
-        }
-        break;
-
-      case 'get_services':
-        if (args.category) {
-          result = await chatWithAgent(sessionId, `show ${args.category} services`);
-        } else {
-          result = await apiRequest(`/pricebook/services?pageSize=${args.limit || 25}`);
-        }
-        break;
-
-      case 'get_equipment':
-        result = await apiRequest(`/pricebook/equipment?pageSize=${args.limit || 25}`);
-        break;
-
-      // Estimate Tools
-      case 'start_estimate':
-        const jobRef = args.jobId ? `job ${args.jobId}` : args.jobName || 'new job';
-        result = await chatWithAgent(sessionId, `start estimate for ${jobRef}`);
-        break;
-
-      case 'add_to_estimate':
-        result = await chatWithAgent(sessionId, `add ${args.items}`);
-        break;
-
-      case 'show_estimate':
-        result = await chatWithAgent(sessionId, 'show estimate');
-        break;
-
-      case 'remove_from_estimate':
-        result = await chatWithAgent(sessionId, `remove ${args.item}`);
-        break;
-
-      case 'create_estimate':
-        if (args.confirm) {
-          // First request creation, then confirm
-          await chatWithAgent(sessionId, 'create estimate');
-          result = await chatWithAgent(sessionId, 'yes');
-        } else {
-          result = await chatWithAgent(sessionId, 'create estimate');
-        }
-        break;
-
-      case 'clear_estimate':
-        result = await chatWithAgent(sessionId, 'clear estimate');
-        break;
-
-      // Sync Tools
-      case 'get_sync_status':
-        result = await apiRequest('/api/sync/pricebook/status');
-        break;
-
-      case 'trigger_sync':
-        result = await apiRequest(`/api/sync/pricebook/${args.type}`, { method: 'POST' });
-        break;
-
-      case 'get_sync_logs':
-        result = await apiRequest(`/api/sync/pricebook/logs?limit=${args.limit || 10}`);
-        break;
-
-      // Direct ServiceTitan Access
-      case 'get_service_details':
-        result = await apiRequest(`/pricebook/services/${args.serviceId}`);
-        break;
-
-      case 'get_material_details':
-        result = await apiRequest(`/pricebook/materials/${args.materialId}`);
-        break;
-
-      case 'update_service':
-        const serviceUpdate = {};
-        if (args.price !== undefined) serviceUpdate.price = args.price;
-        if (args.memberPrice !== undefined) serviceUpdate.memberPrice = args.memberPrice;
-        if (args.addOnPrice !== undefined) serviceUpdate.addOnPrice = args.addOnPrice;
-        result = await apiRequest(`/pricebook/services/${args.serviceId}`, {
-          method: 'PATCH',
-          body: JSON.stringify(serviceUpdate),
-        });
-        break;
-
-      case 'update_material':
-        const materialUpdate = {};
-        if (args.price !== undefined) materialUpdate.price = args.price;
-        if (args.cost !== undefined) materialUpdate.cost = args.cost;
-        result = await apiRequest(`/pricebook/materials/${args.materialId}`, {
-          method: 'PATCH',
-          body: JSON.stringify(materialUpdate),
-        });
-        break;
-
-      // n8n Integration
-      case 'list_webhook_events':
-        result = await apiRequest('/api/n8n/events');
-        break;
-
-      case 'list_webhook_subscriptions':
-        result = await apiRequest('/api/n8n/subscriptions');
-        break;
-
-      case 'subscribe_webhook':
-        result = await apiRequest('/api/n8n/subscribe', {
-          method: 'POST',
-          body: JSON.stringify({
-            webhookUrl: args.webhookUrl,
-            events: args.events,
-            name: args.name,
-          }),
-        });
-        break;
-
-      // Natural Language Chat
-      case 'chat':
-        result = await chatWithAgent(sessionId, args.message);
-        break;
-
-      default:
-        throw new Error(`Unknown tool: ${name}`);
+    // Check for new tools first
+    const tool = TOOL_MAP[name];
+    if (tool && tool.handler) {
+      const result = await tool.handler(args);
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      };
     }
-
-    // Format response
-    let content;
-    if (result?.message) {
-      content = result.message;
-      if (result.context?.estimateTotal) {
-        content += `\n\n[Estimate: ${result.context.estimateItemCount} items, $${result.context.estimateTotal}]`;
-      }
-    } else if (result?.data) {
-      content = JSON.stringify(result.data, null, 2);
-    } else {
-      content = JSON.stringify(result, null, 2);
-    }
-
-    return {
-      content: [{ type: 'text', text: content }],
+    
+    // Handle legacy tools via chat agent
+    const legacyToolHandlers = {
+      'search_pricebook_legacy': async () => chatWithAgent(args.sessionId || DEFAULT_SESSION_ID, `search ${args.query}`),
+      'list_categories': async () => chatWithAgent(DEFAULT_SESSION_ID, 'show categories'),
+      'get_materials': async () => apiRequest(`/api/pricebook/materials?category=${args.category || ''}&limit=${args.limit || 25}`),
+      'get_services': async () => apiRequest(`/api/pricebook/services?category=${args.category || ''}&limit=${args.limit || 25}`),
+      'get_equipment': async () => apiRequest(`/api/pricebook/equipment?limit=${args.limit || 25}`),
+      'get_sync_status': async () => apiRequest('/api/sync/pricebook/status'),
+      'trigger_sync': async () => apiRequest(`/api/sync/pricebook/${args.type}`, { method: 'POST' }),
     };
+    
+    if (legacyToolHandlers[name]) {
+      const result = await legacyToolHandlers[name]();
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      };
+    }
+    
+    throw new Error(`Unknown tool: ${name}`);
+    
   } catch (error) {
+    console.error(`MCP Server: Error in tool ${name}:`, error.message);
     return {
-      content: [{ type: 'text', text: `Error: ${error.message}` }],
+      content: [{ type: 'text', text: JSON.stringify({ success: false, error: error.message }) }],
       isError: true,
     };
   }
@@ -609,9 +307,9 @@ const RESOURCES = [
     mimeType: 'application/json',
   },
   {
-    uri: 'pricebook://webhook-events',
-    name: 'Webhook Events',
-    description: 'Available webhook events for n8n integration',
+    uri: 'pricebook://tools',
+    name: 'Available Tools',
+    description: 'List of all available MCP tools',
     mimeType: 'application/json',
   },
 ];
@@ -638,8 +336,25 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
         data = chatResult.data || chatResult;
         break;
 
-      case 'pricebook://webhook-events':
-        data = await apiRequest('/api/n8n/events');
+      case 'pricebook://tools':
+        data = {
+          totalTools: COMBINED_TOOLS.length,
+          categories: {
+            estimates: collectTools(estimateTools).length,
+            customers: collectTools(customerTools).length,
+            scheduling: collectTools(schedulingTools).length,
+            jobs: collectTools(jobTools).length,
+            invoicing: collectTools(invoicingTools).length,
+            analytics: collectTools(analyticsTools).length,
+            messaging: collectTools(messagingTools).length,
+            workflows: collectTools(workflowTools).length,
+            equipment: collectTools(equipmentTools).length,
+            technicians: collectTools(technicianTools).length,
+            integrations: collectTools(integrationTools).length,
+            ai: collectTools(aiTools).length,
+          },
+          tools: COMBINED_TOOLS.map(t => ({ name: t.name, description: t.description })),
+        };
         break;
 
       default:
@@ -665,9 +380,12 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
 // ============================================
 
 async function main() {
+  console.error('Perfect Catch MCP Server v2.0.0');
+  console.error(`Loaded ${COMBINED_TOOLS.length} tools across 12 categories`);
+  
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('Pricebook MCP Server running on stdio');
+  console.error('MCP Server running on stdio');
 }
 
 main().catch((error) => {

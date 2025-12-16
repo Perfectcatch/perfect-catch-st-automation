@@ -208,37 +208,83 @@ export async function getCapacity(stClient, date, options = {}) {
     return cached;
   }
 
-  // Fetch technician shifts from ServiceTitan (capacity endpoint not available in all tenants)
-  const { stEndpoints } = await import('../lib/stEndpoints.js');
-  const url = stEndpoints.technicianShifts.list();
+  const { default: config } = await import('../config/index.js');
+  const tenantId = config.serviceTitan.tenantId;
 
-  const query = { startsOnOrAfter: date, endsOnOrBefore: date };
-  if (options.zoneId) query.zoneId = options.zoneId;
-  if (options.teamId) query.teamId = options.teamId;
+  // Format date with time for accurate filtering
+  const startsOnOrAfter = `${date}T00:00:00Z`;
+  const endsOnOrBefore = `${date}T23:59:59Z`;
 
-  const response = await stClient.stRequest(url, {
-    method: 'GET',
-    query,
-  });
+  // Step 1: Fetch appointments for the date
+  const appointmentsUrl = `https://api.servicetitan.io/jpm/v2/tenant/${tenantId}/appointments?startsOnOrAfter=${startsOnOrAfter}&endsOnOrBefore=${endsOnOrBefore}`;
+  const appointmentsResponse = await stClient.stRequest(appointmentsUrl);
+  const appointments = appointmentsResponse?.data?.data || [];
 
-  if (response.status !== 200) {
-    throw new Error(`Failed to fetch technician shifts: ${response.status}`);
+  // Step 2: Get appointment IDs to fetch assignments
+  const appointmentIds = appointments.map(a => a.id);
+  let assignments = [];
+  if (appointmentIds.length > 0) {
+    const assignmentsUrl = `https://api.servicetitan.io/dispatch/v2/tenant/${tenantId}/appointment-assignments?appointmentIds=${appointmentIds.join(',')}`;
+    const assignmentsResponse = await stClient.stRequest(assignmentsUrl);
+    assignments = assignmentsResponse?.data?.data || [];
   }
 
-  // Transform shifts data into capacity-like structure
-  const shifts = response.data?.data || [];
+  // Step 3: Fetch active technicians
+  const techParams = new URLSearchParams({ active: 'true' });
+  if (options.teamId) techParams.append('teamId', options.teamId);
+  const techUrl = `https://api.servicetitan.io/settings/v2/tenant/${tenantId}/technicians?${techParams}`;
+  const techResponse = await stClient.stRequest(techUrl);
+  const technicians = techResponse?.data?.data || [];
+
+  // Build appointment lookup
+  const appointmentMap = {};
+  appointments.forEach(apt => {
+    appointmentMap[apt.id] = apt;
+  });
+
+  // Build technician schedules
+  const technicianSchedules = {};
+  technicians.forEach(tech => {
+    technicianSchedules[tech.id] = {
+      technicianId: tech.id,
+      technicianName: tech.name,
+      businessUnitId: tech.businessUnitId,
+      appointments: [],
+    };
+  });
+
+  // Map assignments to technicians
+  assignments.forEach(assignment => {
+    const apt = appointmentMap[assignment.appointmentId];
+    if (apt && technicianSchedules[assignment.technicianId]) {
+      technicianSchedules[assignment.technicianId].appointments.push({
+        appointmentId: apt.id,
+        jobId: apt.jobId,
+        start: apt.start,
+        end: apt.end,
+        status: apt.status,
+      });
+    }
+  });
+
+  // Calculate availability summary
+  const schedules = Object.values(technicianSchedules);
+  const available = schedules.filter(t => t.appointments.length === 0);
+  const booked = schedules.filter(t => t.appointments.length > 0);
+
   const data = {
     date,
-    shifts,
-    totalTechnicians: shifts.length,
-    summary: shifts.reduce((acc, shift) => {
-      const techId = shift.technicianId;
-      if (!acc[techId]) {
-        acc[techId] = { technicianId: techId, shifts: [] };
-      }
-      acc[techId].shifts.push(shift);
-      return acc;
-    }, {}),
+    totalTechnicians: technicians.length,
+    totalAppointments: appointments.length,
+    availableCount: available.length,
+    bookedCount: booked.length,
+    availableTechnicians: available.map(t => ({ id: t.technicianId, name: t.technicianName })),
+    bookedTechnicians: booked.map(t => ({
+      id: t.technicianId,
+      name: t.technicianName,
+      appointmentCount: t.appointments.length,
+      appointments: t.appointments,
+    })),
   };
 
   set('capacity', key, data);

@@ -224,6 +224,345 @@ router.get('/job-profiles', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════
+// ARRIVAL WINDOWS ENDPOINTS
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * GET /arrival-windows - Get all arrival windows
+ */
+router.get('/arrival-windows', async (req, res) => {
+  try {
+    const config = (await import('../config/index.js')).default;
+    const tenantId = config.serviceTitan.tenantId;
+    const url = `https://api.servicetitan.io/dispatch/v2/tenant/${tenantId}/arrival-windows`;
+    const response = await stRequest(url);
+
+    res.json({
+      success: true,
+      count: response?.data?.data?.length || 0,
+      data: response?.data?.data || [],
+    });
+  } catch (error) {
+    logger.error({ error: error.message }, 'Failed to get arrival windows');
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// DISPATCH MONITORING ENDPOINTS (real-time job status)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * GET /dispatch/status - Get today's dispatch status with job states
+ * Returns all appointments for the day with their current status
+ */
+router.get('/dispatch/status', async (req, res) => {
+  try {
+    const { date } = req.query;
+    const config = (await import('../config/index.js')).default;
+    const tenantId = config.serviceTitan.tenantId;
+
+    // Default to today
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    const startsOnOrAfter = `${targetDate}T00:00:00Z`;
+    const endsOnOrBefore = `${targetDate}T23:59:59Z`;
+
+    // Fetch appointments for the date
+    const appointmentsUrl = `https://api.servicetitan.io/jpm/v2/tenant/${tenantId}/appointments?startsOnOrAfter=${startsOnOrAfter}&endsOnOrBefore=${endsOnOrBefore}`;
+    const appointmentsResponse = await stRequest(appointmentsUrl);
+    const appointments = appointmentsResponse?.data?.data || [];
+
+    // Get appointment IDs for assignments
+    const appointmentIds = appointments.map(a => a.id);
+    let assignments = [];
+    if (appointmentIds.length > 0) {
+      const assignmentsUrl = `https://api.servicetitan.io/dispatch/v2/tenant/${tenantId}/appointment-assignments?appointmentIds=${appointmentIds.join(',')}`;
+      const assignmentsResponse = await stRequest(assignmentsUrl);
+      assignments = assignmentsResponse?.data?.data || [];
+    }
+
+    // Build assignment lookup by appointment ID
+    const assignmentsByAppointment = {};
+    assignments.forEach(a => {
+      if (!assignmentsByAppointment[a.appointmentId]) {
+        assignmentsByAppointment[a.appointmentId] = [];
+      }
+      assignmentsByAppointment[a.appointmentId].push({
+        technicianId: a.technicianId,
+        technicianName: a.technicianName,
+        status: a.status,
+        isPaused: a.isPaused,
+      });
+    });
+
+    // Categorize appointments by status
+    const scheduled = [];
+    const dispatched = [];
+    const working = [];
+    const completed = [];
+    const canceled = [];
+
+    appointments.forEach(apt => {
+      const aptData = {
+        appointmentId: apt.id,
+        jobId: apt.jobId,
+        status: apt.status,
+        start: apt.start,
+        end: apt.end,
+        arrivalWindowStart: apt.arrivalWindowStart,
+        arrivalWindowEnd: apt.arrivalWindowEnd,
+        technicians: assignmentsByAppointment[apt.id] || [],
+      };
+
+      switch (apt.status) {
+        case 'Scheduled': scheduled.push(aptData); break;
+        case 'Dispatched': dispatched.push(aptData); break;
+        case 'Working': working.push(aptData); break;
+        case 'Done': completed.push(aptData); break;
+        case 'Canceled': canceled.push(aptData); break;
+        default: scheduled.push(aptData);
+      }
+    });
+
+    res.json({
+      success: true,
+      date: targetDate,
+      summary: {
+        total: appointments.length,
+        scheduled: scheduled.length,
+        dispatched: dispatched.length,
+        working: working.length,
+        completed: completed.length,
+        canceled: canceled.length,
+      },
+      appointments: {
+        scheduled,
+        dispatched,
+        working,
+        completed,
+        canceled,
+      },
+    });
+  } catch (error) {
+    logger.error({ error: error.message }, 'Failed to get dispatch status');
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * GET /dispatch/late - Get technicians running late
+ * Checks if technicians haven't arrived within their arrival window
+ */
+router.get('/dispatch/late', async (req, res) => {
+  try {
+    const { date, thresholdMinutes } = req.query;
+    const config = (await import('../config/index.js')).default;
+    const tenantId = config.serviceTitan.tenantId;
+
+    // Default to today
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    const startsOnOrAfter = `${targetDate}T00:00:00Z`;
+    const endsOnOrBefore = `${targetDate}T23:59:59Z`;
+    const threshold = parseInt(thresholdMinutes) || 0; // Extra minutes past arrival window
+
+    // Fetch appointments
+    const appointmentsUrl = `https://api.servicetitan.io/jpm/v2/tenant/${tenantId}/appointments?startsOnOrAfter=${startsOnOrAfter}&endsOnOrBefore=${endsOnOrBefore}`;
+    const appointmentsResponse = await stRequest(appointmentsUrl);
+    const appointments = appointmentsResponse?.data?.data || [];
+
+    // Get assignments
+    const appointmentIds = appointments.map(a => a.id);
+    let assignments = [];
+    if (appointmentIds.length > 0) {
+      const assignmentsUrl = `https://api.servicetitan.io/dispatch/v2/tenant/${tenantId}/appointment-assignments?appointmentIds=${appointmentIds.join(',')}`;
+      const assignmentsResponse = await stRequest(assignmentsUrl);
+      assignments = assignmentsResponse?.data?.data || [];
+    }
+
+    // Build assignment lookup
+    const assignmentsByAppointment = {};
+    assignments.forEach(a => {
+      if (!assignmentsByAppointment[a.appointmentId]) {
+        assignmentsByAppointment[a.appointmentId] = [];
+      }
+      assignmentsByAppointment[a.appointmentId].push(a);
+    });
+
+    const now = new Date();
+    const lateAppointments = [];
+
+    appointments.forEach(apt => {
+      // Only check scheduled or dispatched (not yet working/done)
+      if (apt.status !== 'Scheduled' && apt.status !== 'Dispatched') return;
+
+      const arrivalEnd = new Date(apt.arrivalWindowEnd);
+      const lateThreshold = new Date(arrivalEnd.getTime() + threshold * 60 * 1000);
+
+      if (now > lateThreshold) {
+        const techs = assignmentsByAppointment[apt.id] || [];
+        const minutesLate = Math.round((now - arrivalEnd) / 60000);
+
+        lateAppointments.push({
+          appointmentId: apt.id,
+          jobId: apt.jobId,
+          status: apt.status,
+          arrivalWindowStart: apt.arrivalWindowStart,
+          arrivalWindowEnd: apt.arrivalWindowEnd,
+          minutesLate,
+          technicians: techs.map(t => ({
+            id: t.technicianId,
+            name: t.technicianName,
+            status: t.status,
+          })),
+        });
+      }
+    });
+
+    // Sort by most late first
+    lateAppointments.sort((a, b) => b.minutesLate - a.minutesLate);
+
+    res.json({
+      success: true,
+      date: targetDate,
+      currentTime: now.toISOString(),
+      thresholdMinutes: threshold,
+      lateCount: lateAppointments.length,
+      lateAppointments,
+    });
+  } catch (error) {
+    logger.error({ error: error.message }, 'Failed to get late technicians');
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * GET /dispatch/notifications - Get dispatch notifications/alerts
+ * Returns status changes and alerts for monitoring dashboards
+ */
+router.get('/dispatch/notifications', async (req, res) => {
+  try {
+    const { date, includeCompleted } = req.query;
+    const config = (await import('../config/index.js')).default;
+    const tenantId = config.serviceTitan.tenantId;
+
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    const startsOnOrAfter = `${targetDate}T00:00:00Z`;
+    const endsOnOrBefore = `${targetDate}T23:59:59Z`;
+
+    // Fetch appointments
+    const appointmentsUrl = `https://api.servicetitan.io/jpm/v2/tenant/${tenantId}/appointments?startsOnOrAfter=${startsOnOrAfter}&endsOnOrBefore=${endsOnOrBefore}`;
+    const appointmentsResponse = await stRequest(appointmentsUrl);
+    const appointments = appointmentsResponse?.data?.data || [];
+
+    // Get assignments
+    const appointmentIds = appointments.map(a => a.id);
+    let assignments = [];
+    if (appointmentIds.length > 0) {
+      const assignmentsUrl = `https://api.servicetitan.io/dispatch/v2/tenant/${tenantId}/appointment-assignments?appointmentIds=${appointmentIds.join(',')}`;
+      const assignmentsResponse = await stRequest(assignmentsUrl);
+      assignments = assignmentsResponse?.data?.data || [];
+    }
+
+    const assignmentsByAppointment = {};
+    assignments.forEach(a => {
+      if (!assignmentsByAppointment[a.appointmentId]) {
+        assignmentsByAppointment[a.appointmentId] = [];
+      }
+      assignmentsByAppointment[a.appointmentId].push(a);
+    });
+
+    const now = new Date();
+    const notifications = [];
+
+    appointments.forEach(apt => {
+      const techs = assignmentsByAppointment[apt.id] || [];
+      const techNames = techs.map(t => t.technicianName).join(', ') || 'Unassigned';
+
+      // Dispatched notification
+      if (apt.status === 'Dispatched') {
+        notifications.push({
+          type: 'dispatched',
+          priority: 'info',
+          appointmentId: apt.id,
+          jobId: apt.jobId,
+          message: `Job dispatched to ${techNames}`,
+          technicians: techNames,
+          start: apt.start,
+          timestamp: apt.modifiedOn || apt.start,
+        });
+      }
+
+      // Working (arrived) notification
+      if (apt.status === 'Working') {
+        notifications.push({
+          type: 'arrived',
+          priority: 'info',
+          appointmentId: apt.id,
+          jobId: apt.jobId,
+          message: `${techNames} arrived on site`,
+          technicians: techNames,
+          start: apt.start,
+          timestamp: apt.modifiedOn || now.toISOString(),
+        });
+      }
+
+      // Completed notification
+      if (apt.status === 'Done' && includeCompleted === 'true') {
+        notifications.push({
+          type: 'completed',
+          priority: 'success',
+          appointmentId: apt.id,
+          jobId: apt.jobId,
+          message: `Job completed by ${techNames}`,
+          technicians: techNames,
+          start: apt.start,
+          end: apt.end,
+          timestamp: apt.modifiedOn || apt.end,
+        });
+      }
+
+      // Late alert
+      if ((apt.status === 'Scheduled' || apt.status === 'Dispatched')) {
+        const arrivalEnd = new Date(apt.arrivalWindowEnd);
+        if (now > arrivalEnd) {
+          const minutesLate = Math.round((now - arrivalEnd) / 60000);
+          notifications.push({
+            type: 'late',
+            priority: 'warning',
+            appointmentId: apt.id,
+            jobId: apt.jobId,
+            message: `${techNames} is ${minutesLate} minutes late`,
+            technicians: techNames,
+            minutesLate,
+            arrivalWindowEnd: apt.arrivalWindowEnd,
+            timestamp: now.toISOString(),
+          });
+        }
+      }
+    });
+
+    // Sort by priority (warning first) then by timestamp
+    const priorityOrder = { warning: 0, info: 1, success: 2 };
+    notifications.sort((a, b) => {
+      const pDiff = priorityOrder[a.priority] - priorityOrder[b.priority];
+      if (pDiff !== 0) return pDiff;
+      return new Date(b.timestamp) - new Date(a.timestamp);
+    });
+
+    res.json({
+      success: true,
+      date: targetDate,
+      currentTime: now.toISOString(),
+      notificationCount: notifications.length,
+      notifications,
+    });
+  } catch (error) {
+    logger.error({ error: error.message }, 'Failed to get dispatch notifications');
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
 // AVAILABILITY ENDPOINTS (hybrid: cached + real-time)
 // ═══════════════════════════════════════════════════════════════
 
