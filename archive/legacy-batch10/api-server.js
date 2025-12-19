@@ -264,6 +264,151 @@ app.get("/opportunities/:id/followups", (req, res) => {
 });
 
 // ---------------------------------------------------------------
+// TECHNICIANS
+// ---------------------------------------------------------------
+app.get("/technicians", (req, res) => {
+    const tenant = process.env.SERVICE_TITAN_TENANT_ID;
+    const url = `https://api.servicetitan.io/settings/v2/tenant/${tenant}/technicians`;
+    return stCall(url, req, res);
+});
+
+app.get("/technicians/:id", (req, res) => {
+    const tenant = process.env.SERVICE_TITAN_TENANT_ID;
+    const { id } = req.params;
+    const url = `https://api.servicetitan.io/settings/v2/tenant/${tenant}/technicians/${id}`;
+    return stCall(url, req, res);
+});
+
+// ---------------------------------------------------------------
+// DISPATCH - TECHNICIAN SHIFTS
+// ---------------------------------------------------------------
+app.get("/dispatch/technician-shifts", (req, res) => {
+    const tenant = process.env.SERVICE_TITAN_TENANT_ID;
+    const url = `https://api.servicetitan.io/dispatch/v2/tenant/${tenant}/technician-shifts`;
+    return stCall(url, req, res);
+});
+
+// ---------------------------------------------------------------
+// DISPATCH - CAPACITY
+// ---------------------------------------------------------------
+app.get("/dispatch/capacity", (req, res) => {
+    const tenant = process.env.SERVICE_TITAN_TENANT_ID;
+    const url = `https://api.servicetitan.io/dispatch/v2/tenant/${tenant}/capacity`;
+    return stCall(url, req, res);
+});
+
+// ---------------------------------------------------------------
+// DISPATCH - APPOINTMENT ASSIGNMENTS
+// ---------------------------------------------------------------
+app.get("/dispatch/appointment-assignments", (req, res) => {
+    const tenant = process.env.SERVICE_TITAN_TENANT_ID;
+    const url = `https://api.servicetitan.io/dispatch/v2/tenant/${tenant}/appointment-assignments`;
+    return stCall(url, req, res);
+});
+
+// ---------------------------------------------------------------
+// VAPI - TECHNICIAN AVAILABILITY (Real-time check)
+// Combines technician shifts, capacity, and assignments
+// ---------------------------------------------------------------
+app.get("/vapi/technician-availability", async (req, res) => {
+    try {
+        const tenant = process.env.SERVICE_TITAN_TENANT_ID;
+        const appKey = process.env.SERVICE_TITAN_APP_KEY;
+        const token = await getAccessToken();
+
+        const headers = {
+            "Authorization": `Bearer ${token}`,
+            "ST-App-Key": appKey,
+            "Content-Type": "application/json"
+        };
+
+        // Parse query params
+        const { date, technicianIds, businessUnitId } = req.query;
+        
+        // Default to today if no date provided
+        const targetDate = date || new Date().toISOString().split('T')[0];
+        const startsOnOrAfter = `${targetDate}T00:00:00Z`;
+        const startsOnOrBefore = `${targetDate}T23:59:59Z`;
+
+        console.log(`➡️  VAPI Availability Check: date=${targetDate}, technicianIds=${technicianIds || 'all'}`);
+
+        // Build technician shifts URL with date filter
+        let shiftsUrl = `https://api.servicetitan.io/dispatch/v2/tenant/${tenant}/technician-shifts?startsOnOrAfter=${startsOnOrAfter}&endsOnOrBefore=${startsOnOrBefore}`;
+        if (technicianIds) {
+            shiftsUrl += `&technicianIds=${technicianIds}`;
+        }
+
+        // Fetch technician shifts for the date
+        const shiftsResponse = await fetch(shiftsUrl, { method: "GET", headers });
+        const shiftsData = await shiftsResponse.json();
+
+        // Fetch technicians list to get names
+        let techUrl = `https://api.servicetitan.io/settings/v2/tenant/${tenant}/technicians?active=true`;
+        if (businessUnitId) {
+            techUrl += `&businessUnitId=${businessUnitId}`;
+        }
+        const techResponse = await fetch(techUrl, { method: "GET", headers });
+        const techData = await techResponse.json();
+
+        // Build technician lookup map
+        const techMap = {};
+        if (techData.data) {
+            techData.data.forEach(tech => {
+                techMap[tech.id] = {
+                    id: tech.id,
+                    name: tech.name,
+                    businessUnitId: tech.businessUnitId,
+                    active: tech.active
+                };
+            });
+        }
+
+        // Process shifts into availability
+        const availability = [];
+        if (shiftsData.data) {
+            shiftsData.data.forEach(shift => {
+                const tech = techMap[shift.technicianId] || { name: `Technician ${shift.technicianId}` };
+                availability.push({
+                    technicianId: shift.technicianId,
+                    technicianName: tech.name,
+                    date: targetDate,
+                    shiftStart: shift.start,
+                    shiftEnd: shift.end,
+                    active: shift.active !== false,
+                    businessUnitId: tech.businessUnitId
+                });
+            });
+        }
+
+        // Return VAPI-friendly response
+        res.json({
+            success: true,
+            date: targetDate,
+            totalTechnicians: availability.length,
+            availability,
+            message: availability.length > 0 
+                ? `Found ${availability.length} technician(s) with shifts on ${targetDate}`
+                : `No technicians with shifts found for ${targetDate}`
+        });
+
+    } catch (err) {
+        console.error("🔥 VAPI Availability Error:", err);
+        res.status(500).json({ 
+            success: false, 
+            error: err.message,
+            message: "Failed to check technician availability"
+        });
+    }
+});
+
+// ---------------------------------------------------------------
+// HEALTH CHECK (for container health)
+// ---------------------------------------------------------------
+app.get("/health", (req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// ---------------------------------------------------------------
 // START SERVER
 // ---------------------------------------------------------------
 app.listen(3001, () => {

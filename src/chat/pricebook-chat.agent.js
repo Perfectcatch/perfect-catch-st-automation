@@ -660,35 +660,45 @@ export class PricebookChatAgent {
         where: {
           OR: [
             { name: { contains: searchTerm, mode: 'insensitive' } },
+            { displayName: { contains: searchTerm, mode: 'insensitive' } },
+            { code: { contains: searchTerm, mode: 'insensitive' } },
+            { description: { contains: searchTerm, mode: 'insensitive' } },
+            { manufacturer: { contains: searchTerm, mode: 'insensitive' } },
+          ],
+          active: true,
+          deletedAt: null,
+        },
+        orderBy: { price: 'desc' },
+        take: 25,
+      }),
+      this.prisma.pricebookService.findMany({
+        where: {
+          OR: [
+            { name: { contains: searchTerm, mode: 'insensitive' } },
+            { displayName: { contains: searchTerm, mode: 'insensitive' } },
             { code: { contains: searchTerm, mode: 'insensitive' } },
             { description: { contains: searchTerm, mode: 'insensitive' } },
           ],
           active: true,
           deletedAt: null,
         },
-        take: 10,
-      }),
-      this.prisma.pricebookService.findMany({
-        where: {
-          OR: [
-            { name: { contains: searchTerm, mode: 'insensitive' } },
-            { code: { contains: searchTerm, mode: 'insensitive' } },
-          ],
-          active: true,
-          deletedAt: null,
-        },
-        take: 5,
+        orderBy: { price: 'desc' },
+        take: 25,
       }),
       this.prisma.pricebookEquipment.findMany({
         where: {
           OR: [
             { name: { contains: searchTerm, mode: 'insensitive' } },
+            { displayName: { contains: searchTerm, mode: 'insensitive' } },
             { code: { contains: searchTerm, mode: 'insensitive' } },
+            { description: { contains: searchTerm, mode: 'insensitive' } },
+            { manufacturer: { contains: searchTerm, mode: 'insensitive' } },
           ],
           active: true,
           deletedAt: null,
         },
-        take: 5,
+        orderBy: { price: 'desc' },
+        take: 50,
       }),
     ]);
 

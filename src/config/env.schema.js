@@ -32,6 +32,10 @@ export const envSchema = z.object({
 
   // Optional: Log level
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).optional(),
+
+  // Database configuration (for job sync)
+  DATABASE_URL: z.string().optional(),
+  DATABASE_MAX_CONNECTIONS: z.string().default('20').transform(Number),
 });
 
 export function validateEnv() {

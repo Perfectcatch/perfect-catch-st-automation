@@ -1,0 +1,304 @@
+# 🚀 WINDSURF DEPLOYMENT PROMPT - BATCH 3 & 4
+
+Copy and paste this entire prompt into Windsurf:
+
+---
+
+## CONTEXT
+
+Batch 1 (Database) and Batch 2 (MCP Server) are fully deployed. Now we're building the automation engines:
+
+- **Batch 3:** ServiceTitan Sync Engine (populates database with real ST data)
+- **Batch 4:** Event-Driven Workflow Engine (automation brain)
+
+All specifications are in the reference folder:
+- `BATCH_3_SYNC_ENGINE.md`
+- `BATCH_4_WORKFLOW_ENGINE.md`
+
+## YOUR TASK
+
+### PHASE 1: BATCH 3 - SYNC ENGINE (45 minutes)
+
+Create ServiceTitan sync services that populate the 15 ST tables with real data.
+
+#### 1.1 Create Directory Structure
+```
+src/services/sync/
+scripts/
+```
+
+#### 1.2 Create Core Files
+
+**Create these 8 files:**
+
+1. `src/services/sync/sync-orchestrator.js`
+   - Main coordinator
+   - Full sync function
+   - Incremental sync function
+   - Handles sync order and dependencies
+
+2. `src/services/sync/sync-customers.js`
+   - Fetch customers from ST API (paginated)
+   - Upsert to st_customers table
+   - Track stats (created/updated/failed)
+   - Log to st_sync_log
+
+3. `src/services/sync/sync-jobs.js`
+   - Same pattern as customers
+   - Sync to st_jobs table
+   - Requires customers exist first
+
+4. `src/services/sync/sync-estimates.js`
+   - Sync to st_estimates table
+   - Requires jobs exist first
+
+5. `src/services/sync/sync-appointments.js`
+   - Sync to st_appointments table
+
+6. `src/services/sync/sync-invoices.js`
+   - Sync to st_invoices table
+
+7. `src/services/sync/sync-reference-data.js`
+   - Sync business units, technicians, job types, etc.
+   - These have no dependencies
+
+8. `src/services/sync/sync-scheduler.js`
+   - Cron scheduler
+   - Incremental every 5 minutes
+   - Full sync daily at 2 AM
+
+9. `scripts/run-initial-sync.js`
+   - One-time full sync script
+   - User-friendly output
+
+#### 1.3 Update package.json
+
+Add scripts:
+```json
+"sync:initial": "node scripts/run-initial-sync.js",
+"sync:incremental": "node -e 'import(\"./src/services/sync/sync-orchestrator.js\").then(m => m.runIncrementalSync())'",
+"sync:full": "node -e 'import(\"./src/services/sync/sync-orchestrator.js\").then(m => m.runFullSync())'",
+"worker:sync": "node src/services/sync/sync-scheduler.js"
+```
+
+#### 1.4 Implementation Notes
+
+- Use existing `stClient` service for API calls
+- Use Prisma for database operations
+- All functions should follow the pattern in BATCH_3_SYNC_ENGINE.md
+- Implement proper error handling and retry logic
+- Add 100ms delay between pages for rate limiting
+- Log all operations with logger
+
+---
+
+### PHASE 2: BATCH 4 - WORKFLOW ENGINE (60 minutes)
+
+Create event-driven workflow automation system.
+
+#### 2.1 Create Directory Structure
+```
+src/services/workflow/
+```
+
+#### 2.2 Create Core Files
+
+**Create these 7 files:**
+
+1. `src/services/workflow/event-detector.js`
+   - EventEmitter class
+   - Polls st_* tables every 30 seconds
+   - Detects new estimates, jobs, invoices
+   - Detects status changes (estimate sold, job completed)
+   - Emits typed events
+
+2. `src/services/workflow/trigger-engine.js`
+   - Listens to events from detector
+   - Finds matching workflow_definitions
+   - Evaluates trigger conditions
+   - Creates workflow_instances
+
+3. `src/services/workflow/execution-engine.js`
+   - Checks every 10 seconds for due steps
+   - Evaluates stop conditions
+   - Executes steps via agent executor
+   - Advances to next step or completes
+
+4. `src/services/workflow/agent-executor.js`
+   - Uses Anthropic Claude API
+   - Interprets natural language actions
+   - Has access to MCP tools (send_sms, send_email)
+   - Returns execution results
+
+5. `src/services/workflow/condition-evaluator.js`
+   - Evaluates condition strings
+   - Example: "estimate.status == 'Sold'"
+   - Fetches current entity state
+   - Returns boolean
+
+6. `src/services/workflow/workflow-manager.js`
+   - Main coordinator
+   - Starts all engines
+   - Connects event detector to trigger engine
+
+7. `scripts/start-workflow-workers.js`
+   - Entry point for workflow system
+   - Handles graceful shutdown
+
+#### 2.3 Update package.json
+
+Add script:
+```json
+"worker:workflows": "node scripts/start-workflow-workers.js"
+```
+
+#### 2.4 Implementation Notes
+
+- Follow exact architecture from BATCH_4_WORKFLOW_ENGINE.md
+- Event detector polls every 30 seconds
+- Execution engine checks every 10 seconds
+- Use Anthropic SDK for Claude integration
+- All operations logged with correlation IDs
+- Proper error handling and recovery
+
+---
+
+### PHASE 3: CONFIGURATION & TESTING (15 minutes)
+
+#### 3.1 Verify Environment Variables
+
+Ensure `.env` has:
+```bash
+# Anthropic
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Database
+SERVICETITAN_DATABASE_URL=postgresql://...
+
+# ServiceTitan (should already exist)
+SERVICE_TITAN_TENANT_ID=...
+SERVICE_TITAN_CLIENT_ID=...
+SERVICE_TITAN_CLIENT_SECRET=...
+SERVICE_TITAN_APP_KEY=...
+```
+
+#### 3.2 Test Sync Engine
+
+```bash
+# Test initial sync (will populate database)
+npm run sync:initial
+
+# Verify data
+psql -d servicetitan_mirror -c "SELECT COUNT(*) FROM st_customers;"
+psql -d servicetitan_mirror -c "SELECT COUNT(*) FROM st_jobs;"
+```
+
+#### 3.3 Test Workflow Engine
+
+```bash
+# Start workflow workers
+npm run worker:workflows
+
+# Should see:
+# [INFO] Starting workflow system...
+# [INFO] Starting event detector...
+# [INFO] Starting execution engine...
+```
+
+---
+
+## IMPORTANT CONSTRAINTS
+
+1. **Use existing infrastructure:**
+   - Existing stClient for ST API
+   - Existing Prisma client for database
+   - Existing logger for logging
+
+2. **Follow patterns:**
+   - All sync functions follow same structure
+   - All workflow components follow event-driven pattern
+   - Error handling everywhere
+
+3. **Production quality:**
+   - Comprehensive logging
+   - Error recovery
+   - Rate limiting
+   - Progress tracking
+
+4. **Don't break anything:**
+   - Keep existing pricebook sync working
+   - Keep existing MCP server working
+   - Add, don't replace
+
+---
+
+## VERIFICATION CHECKLIST
+
+After Batch 3:
+- [ ] All 8 sync files created
+- [ ] sync-orchestrator.js exports runFullSync and runIncrementalSync
+- [ ] scripts/run-initial-sync.js executable
+- [ ] npm run sync:initial completes without errors
+- [ ] st_customers table has data
+- [ ] st_jobs table has data
+- [ ] st_sync_log shows completed syncs
+
+After Batch 4:
+- [ ] All 7 workflow files created
+- [ ] event-detector.js polls every 30 seconds
+- [ ] execution-engine.js checks every 10 seconds
+- [ ] agent-executor.js uses Anthropic API
+- [ ] workflow-manager.js coordinates all components
+- [ ] npm run worker:workflows starts successfully
+- [ ] No errors in logs
+
+---
+
+## OUTPUT REQUIREMENTS
+
+After completion, provide:
+
+1. **File Summary**
+   - List of all files created
+   - Line counts
+   - Key functions in each file
+
+2. **Test Results**
+   - Initial sync results (records synced)
+   - Workflow system startup logs
+   - Any errors encountered
+
+3. **Quick Start Guide**
+   - How to run initial sync
+   - How to start workers
+   - How to verify it's working
+   - How to monitor logs
+
+---
+
+## QUESTIONS TO ASK ME
+
+If you need:
+- Clarification on any function implementation
+- ServiceTitan API specifics
+- Database schema details
+- Error handling strategy
+- Testing approach
+
+---
+
+## REFERENCE FILES
+
+All specs in reference folder:
+- `BATCH_3_SYNC_ENGINE.md` - Complete sync engine implementation
+- `BATCH_4_WORKFLOW_ENGINE.md` - Complete workflow engine implementation
+
+Read these carefully before starting. They contain complete, production-ready code examples.
+
+---
+
+## BEGIN DEPLOYMENT
+
+Start with Phase 1 (Sync Engine) and proceed systematically. Report progress after each phase.
+
+Let's build the automation core!

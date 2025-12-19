@@ -1,0 +1,495 @@
+{
+  "name": "Get Jobs (Optimized v4.0)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0],
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger (Every 5 min)"
+    },
+    {
+      "parameters": {
+        "url": "=http://st-automation-api:3001/db/sync-state/lastJobPull",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [200, 0],
+      "id": "get-last-pull",
+      "name": "Get Last Pull Timestamp"
+    },
+    {
+      "parameters": {
+        "url": "=http://st-automation-api:3001/jobs?createdOnOrAfter={{ $json.value }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [400, 0],
+      "id": "get-jobs",
+      "name": "Get Jobs from ServiceTitan"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract job data array from ServiceTitan response\nconst response = $input.item.json;\n\n// ServiceTitan returns data in different formats\nconst jobs = response.data || response.jobs || (Array.isArray(response) ? response : [response]);\n\nif (!jobs || jobs.length === 0) {\n  return [\n    {\n      json: {\n        hasJobs: false,\n        count: 0,\n        jobs: []\n      }\n    }\n  ];\n}\n\n// Transform jobs into batch upsert format\nconst jobsForUpsert = jobs.map(job => {\n  // Extract customer data from job response\n  const customerData = {\n    customerId: job.customerId,\n    locationId: job.locationId,\n    firstName: job.customer?.name?.split(' ')[0] || '',\n    lastName: job.customer?.name?.split(' ').slice(1).join(' ') || '',\n    email: job.customer?.email || '',\n    phone: job.customer?.phoneNumber || '',\n    address: {\n      street: job.location?.address?.street || '',\n      city: job.location?.address?.city || '',\n      state: job.location?.address?.state || '',\n      zip: job.location?.address?.zip || '',\n      county: job.location?.address?.county || ''\n    }\n  };\n\n  // Job data\n  const jobData = {\n    id: job.id,\n    jobNumber: job.jobNumber,\n    customerId: job.customerId,\n    locationId: job.locationId,\n    businessUnitId: job.businessUnitId,\n    jobTypeId: job.jobTypeId,\n    jobTypeName: job.jobType?.name || 'Unknown',\n    jobStatus: job.jobStatus,\n    priority: job.priority,\n    summary: job.summary,\n    createdOn: job.createdOn,\n    completedOn: job.completedOn,\n    modifiedOn: job.modifiedOn,\n    firstAppointmentId: job.firstAppointmentId,\n    lastAppointmentId: job.lastAppointmentId,\n    appointmentCount: job.appointmentCount,\n    total: job.total,\n    invoiceId: job.invoiceId,\n    estimateIds: job.estimateIds,\n    noCharge: job.noCharge,\n    campaignId: job.campaignId,\n    leadCallId: job.leadCallId,\n    tagTypeIds: job.tagTypeIds\n  };\n\n  return {\n    job: jobData,\n    customer: customerData\n  };\n});\n\nreturn [\n  {\n    json: {\n      hasJobs: true,\n      count: jobs.length,\n      jobs: jobsForUpsert\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [600, 0],
+      "id": "prepare-batch",
+      "name": "Prepare Batch Upsert"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-jobs-check",
+              "leftValue": "={{ $json.hasJobs }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [800, 0],
+      "id": "check-has-jobs",
+      "name": "Has Jobs?"
+    },
+    {
+      "parameters": {
+        "url": "http://st-automation-api:3001/db/jobs/upsert-batch",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ jobs: $json.jobs }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [1000, -100],
+      "id": "batch-upsert",
+      "name": "Batch Upsert to Database"
+    },
+    {
+      "parameters": {
+        "url": "http://st-automation-api:3001/db/jobs/pending-ghl-sync?limit=500",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, -100],
+      "id": "get-pending-sync",
+      "name": "Get Pending GHL Sync Jobs"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Split jobs array and route based on business unit\nconst response = $input.item.json;\nconst jobs = response.jobs || [];\n\nif (jobs.length === 0) {\n  return [];\n}\n\n// Business Unit IDs:\n// Sales: Electrical Sales (1314), Pool Sales (4622)\n// Install: Electrical Install (1308), Pool Install (4623)\n// Service: Electrical Service (54670601), Pool Service (26143)\n\nconst SALES_BU_IDS = [1314, 4622];\nconst INSTALL_BU_IDS = [1308, 4623];\nconst SERVICE_BU_IDS = [54670601, 26143];\n\n// Return each job with its routing category\nreturn jobs.map(job => {\n  const buId = Number(job.business_unit_id);\n  let route = 'unknown';\n  \n  if (SALES_BU_IDS.includes(buId)) {\n    route = 'sales';\n  } else if (INSTALL_BU_IDS.includes(buId)) {\n    route = 'install';\n  } else if (SERVICE_BU_IDS.includes(buId)) {\n    route = 'service';\n  }\n  \n  return {\n    json: {\n      ...job,\n      route: route\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1400, -100],
+      "id": "route-jobs",
+      "name": "Route Jobs by Business Unit"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "sales",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Sales"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "install",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Install"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "service",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Service"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "none"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1600, -100],
+      "id": "switch-by-route",
+      "name": "Switch: Route to GHL Pipeline"
+    },
+    {
+      "parameters": {
+        "url": "https://services.leadconnectorhq.com/hooks/kgnEweBlJ8Uq11kNc3Xs/webhook-trigger/SALES_WEBHOOK_ID",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "job_id", "value": "={{ $json.st_job_number }}"},
+            {"name": "customer_id", "value": "={{ $json.st_customer_id }}"},
+            {"name": "Job_description", "value": "={{ $json.summary }}"},
+            {"name": "location_id", "value": "={{ $json.st_location_id }}"},
+            {"name": "Name", "value": "={{ $json.first_name }} {{ $json.last_name }}"},
+            {"name": "street", "value": "={{ $json.street }}"},
+            {"name": "city", "value": "={{ $json.city }}"},
+            {"name": "state", "value": "={{ $json.state }}"},
+            {"name": "postal_code", "value": "={{ $json.postal_code }}"},
+            {"name": "country", "value": "={{ $json.county }}"},
+            {"name": "phone", "value": "={{ $json.phone }}"},
+            {"name": "email", "value": "={{ $json.email }}"},
+            {"name": "opportunity_name", "value": "={{ $json.job_type_name }}"},
+            {"name": "first_name", "value": "={{ $json.first_name }}"},
+            {"name": "last_name", "value": "={{ $json.last_name }}"},
+            {"name": "business_unit", "value": "=Sales (Electrical + Pool)"}
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [1850, -250],
+      "id": "push-ghl-sales",
+      "name": "Push to GHL: Sales (Electrical + Pool)"
+    },
+    {
+      "parameters": {
+        "url": "https://services.leadconnectorhq.com/hooks/kgnEweBlJ8Uq11kNc3Xs/webhook-trigger/INSTALL_WEBHOOK_ID",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "job_id", "value": "={{ $json.st_job_number }}"},
+            {"name": "customer_id", "value": "={{ $json.st_customer_id }}"},
+            {"name": "Job_description", "value": "={{ $json.summary }}"},
+            {"name": "location_id", "value": "={{ $json.st_location_id }}"},
+            {"name": "Name", "value": "={{ $json.first_name }} {{ $json.last_name }}"},
+            {"name": "street", "value": "={{ $json.street }}"},
+            {"name": "city", "value": "={{ $json.city }}"},
+            {"name": "state", "value": "={{ $json.state }}"},
+            {"name": "postal_code", "value": "={{ $json.postal_code }}"},
+            {"name": "country", "value": "={{ $json.county }}"},
+            {"name": "phone", "value": "={{ $json.phone }}"},
+            {"name": "email", "value": "={{ $json.email }}"},
+            {"name": "opportunity_name", "value": "={{ $json.job_type_name }}"},
+            {"name": "first_name", "value": "={{ $json.first_name }}"},
+            {"name": "last_name", "value": "={{ $json.last_name }}"},
+            {"name": "business_unit", "value": "=Install (Electrical + Pool)"}
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [1850, -100],
+      "id": "push-ghl-install",
+      "name": "Push to GHL: Install (Electrical + Pool)"
+    },
+    {
+      "parameters": {
+        "url": "https://services.leadconnectorhq.com/hooks/kgnEweBlJ8Uq11kNc3Xs/webhook-trigger/SERVICE_WEBHOOK_ID",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "job_id", "value": "={{ $json.st_job_number }}"},
+            {"name": "customer_id", "value": "={{ $json.st_customer_id }}"},
+            {"name": "Job_description", "value": "={{ $json.summary }}"},
+            {"name": "location_id", "value": "={{ $json.st_location_id }}"},
+            {"name": "Name", "value": "={{ $json.first_name }} {{ $json.last_name }}"},
+            {"name": "street", "value": "={{ $json.street }}"},
+            {"name": "city", "value": "={{ $json.city }}"},
+            {"name": "state", "value": "={{ $json.state }}"},
+            {"name": "postal_code", "value": "={{ $json.postal_code }}"},
+            {"name": "country", "value": "={{ $json.county }}"},
+            {"name": "phone", "value": "={{ $json.phone }}"},
+            {"name": "email", "value": "={{ $json.email }}"},
+            {"name": "opportunity_name", "value": "={{ $json.job_type_name }}"},
+            {"name": "first_name", "value": "={{ $json.first_name }}"},
+            {"name": "last_name", "value": "={{ $json.last_name }}"},
+            {"name": "business_unit", "value": "=Service (Electrical + Pool)"}
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [1850, 50],
+      "id": "push-ghl-service",
+      "name": "Push to GHL: Service (Electrical + Pool)"
+    },
+    {
+      "parameters": {
+        "url": "=http://st-automation-api:3001/db/jobs/{{ $json.st_job_id }}/ghl-sync",
+        "method": "PATCH",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'synced', opportunityId: $json.opportunityId || 'created' }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [2100, -250],
+      "id": "mark-synced-sales",
+      "name": "Mark Synced: Sales"
+    },
+    {
+      "parameters": {
+        "url": "=http://st-automation-api:3001/db/jobs/{{ $json.st_job_id }}/ghl-sync",
+        "method": "PATCH",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'synced', opportunityId: $json.opportunityId || 'created' }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [2100, -100],
+      "id": "mark-synced-install",
+      "name": "Mark Synced: Install"
+    },
+    {
+      "parameters": {
+        "url": "=http://st-automation-api:3001/db/jobs/{{ $json.st_job_id }}/ghl-sync",
+        "method": "PATCH",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'synced', opportunityId: $json.opportunityId || 'created' }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [2100, 50],
+      "id": "mark-synced-service",
+      "name": "Mark Synced: Service"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the batch upsert result to know how many jobs were processed\nconst batchResult = $('Batch Upsert to Database').first().json;\nconst jobCount = batchResult.total || 0;\n\n// Get the original jobs to find the latest timestamp\nconst preparedBatch = $('Prepare Batch Upsert').first().json;\nconst jobs = preparedBatch.jobs || [];\n\nif (jobs.length === 0) {\n  return [];\n}\n\n// Find the latest job creation timestamp\nconst latestJob = jobs.reduce((latest, item) => {\n  const jobDate = new Date(item.job.createdOn);\n  return jobDate > latest ? jobDate : latest;\n}, new Date(0));\n\nconst newTimestamp = latestJob.toISOString();\n\nreturn {\n  json: {\n    key: 'lastJobPull',\n    value: newTimestamp,\n    metadata: {\n      jobsProcessed: jobCount,\n      workflowExecution: $workflow.id,\n      lastSync: new Date().toISOString(),\n      version: 'v4.0-optimized'\n    }\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2300, -100],
+      "id": "prepare-state-update",
+      "name": "Prepare Sync State Update"
+    },
+    {
+      "parameters": {
+        "url": "http://st-automation-api:3001/db/sync-state/lastJobPull",
+        "method": "PUT",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ value: $json.value, metadata: $json.metadata }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [2500, -100],
+      "id": "update-sync-state",
+      "name": "Update Sync State"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calculate workflow duration\nconst startTime = $('Schedule Trigger (Every 5 min)').first().json.timestamp || new Date();\nconst durationMs = Date.now() - new Date(startTime).getTime();\n\n// Get batch result\nconst batchResult = $('Batch Upsert to Database').first().json;\n\nreturn {\n  json: {\n    syncType: 'job_pull',\n    status: 'completed',\n    recordsProcessed: batchResult.total || 0,\n    recordsSucceeded: batchResult.succeeded || 0,\n    recordsFailed: batchResult.failed || 0,\n    workflowExecutionId: $workflow.id,\n    durationMs: durationMs,\n    metadata: {\n      version: 'v4.0-optimized',\n      batchProcessing: true,\n      businessUnitGroups: {\n        sales: [1314, 4622],\n        install: [1308, 4623],\n        service: [54670601, 26143]\n      }\n    }\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2700, -100],
+      "id": "prepare-log",
+      "name": "Prepare Log Entry"
+    },
+    {
+      "parameters": {
+        "url": "http://st-automation-api:3001/db/sync-logs",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [2900, -100],
+      "id": "log-completion",
+      "name": "Log Sync Completion"
+    },
+    {
+      "parameters": {
+        "jsCode": "// No jobs to process, just log it\nreturn {\n  json: {\n    syncType: 'job_pull',\n    status: 'completed',\n    recordsProcessed: 0,\n    recordsSucceeded: 0,\n    recordsFailed: 0,\n    workflowExecutionId: $workflow.id,\n    durationMs: 100,\n    metadata: {\n      version: 'v4.0-optimized',\n      note: 'No new jobs to process'\n    }\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 100],
+      "id": "prepare-no-jobs-log",
+      "name": "Prepare No Jobs Log"
+    },
+    {
+      "parameters": {
+        "url": "http://st-automation-api:3001/db/sync-logs",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [1200, 100],
+      "id": "log-no-jobs",
+      "name": "Log No Jobs"
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (Every 5 min)": {
+      "main": [[{"node": "Get Last Pull Timestamp", "type": "main", "index": 0}]]
+    },
+    "Get Last Pull Timestamp": {
+      "main": [[{"node": "Get Jobs from ServiceTitan", "type": "main", "index": 0}]]
+    },
+    "Get Jobs from ServiceTitan": {
+      "main": [[{"node": "Prepare Batch Upsert", "type": "main", "index": 0}]]
+    },
+    "Prepare Batch Upsert": {
+      "main": [[{"node": "Has Jobs?", "type": "main", "index": 0}]]
+    },
+    "Has Jobs?": {
+      "main": [
+        [{"node": "Batch Upsert to Database", "type": "main", "index": 0}],
+        [{"node": "Prepare No Jobs Log", "type": "main", "index": 0}]
+      ]
+    },
+    "Batch Upsert to Database": {
+      "main": [[{"node": "Get Pending GHL Sync Jobs", "type": "main", "index": 0}]]
+    },
+    "Get Pending GHL Sync Jobs": {
+      "main": [[{"node": "Route Jobs by Business Unit", "type": "main", "index": 0}]]
+    },
+    "Route Jobs by Business Unit": {
+      "main": [[{"node": "Switch: Route to GHL Pipeline", "type": "main", "index": 0}]]
+    },
+    "Switch: Route to GHL Pipeline": {
+      "main": [
+        [{"node": "Push to GHL: Sales (Electrical + Pool)", "type": "main", "index": 0}],
+        [{"node": "Push to GHL: Install (Electrical + Pool)", "type": "main", "index": 0}],
+        [{"node": "Push to GHL: Service (Electrical + Pool)", "type": "main", "index": 0}]
+      ]
+    },
+    "Push to GHL: Sales (Electrical + Pool)": {
+      "main": [[{"node": "Mark Synced: Sales", "type": "main", "index": 0}]]
+    },
+    "Push to GHL: Install (Electrical + Pool)": {
+      "main": [[{"node": "Mark Synced: Install", "type": "main", "index": 0}]]
+    },
+    "Push to GHL: Service (Electrical + Pool)": {
+      "main": [[{"node": "Mark Synced: Service", "type": "main", "index": 0}]]
+    },
+    "Mark Synced: Sales": {
+      "main": [[{"node": "Prepare Sync State Update", "type": "main", "index": 0}]]
+    },
+    "Mark Synced: Install": {
+      "main": [[{"node": "Prepare Sync State Update", "type": "main", "index": 0}]]
+    },
+    "Mark Synced: Service": {
+      "main": [[{"node": "Prepare Sync State Update", "type": "main", "index": 0}]]
+    },
+    "Prepare Sync State Update": {
+      "main": [[{"node": "Update Sync State", "type": "main", "index": 0}]]
+    },
+    "Update Sync State": {
+      "main": [[{"node": "Prepare Log Entry", "type": "main", "index": 0}]]
+    },
+    "Prepare Log Entry": {
+      "main": [[{"node": "Log Sync Completion", "type": "main", "index": 0}]]
+    },
+    "Prepare No Jobs Log": {
+      "main": [[{"node": "Log No Jobs", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": ["servicetitan", "gohighlevel", "job-sync", "v4", "optimized", "batch", "postgresql"],
+  "versionId": "4.0.0",
+  "notes": "v4.0 - 2025-12-15: Consolidated business units into 3 groups (Sales, Install, Service). Uses Switch node for proper routing. Business Unit IDs: Sales (1314, 4622), Install (1308, 4623), Service (54670601, 26143)."
+}

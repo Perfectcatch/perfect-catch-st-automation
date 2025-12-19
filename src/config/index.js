@@ -47,6 +47,12 @@ export const config = {
     maxRetries: env.MAX_RETRIES,
     delayMs: env.RETRY_DELAY_MS,
   },
+
+  // Database configuration (for job sync)
+  database: {
+    url: env.DATABASE_URL,
+    maxConnections: env.DATABASE_MAX_CONNECTIONS,
+  },
 };
 
 export default config;

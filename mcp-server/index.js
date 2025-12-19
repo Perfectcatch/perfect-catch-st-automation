@@ -1,9 +1,48 @@
 #!/usr/bin/env node
 /**
  * Perfect Catch MCP Server - Complete Edition
- * 
- * Model Context Protocol server with 57 AI-powered tools for field service automation.
- * 
+ *
+ * Model Context Protocol server with 101 AI-powered tools for field service automation.
+ */
+
+// Load environment variables from parent .env file
+import { readFileSync, existsSync } from 'fs';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const envPath = resolve(__dirname, '..', '.env');
+
+if (existsSync(envPath)) {
+  const envContent = readFileSync(envPath, 'utf-8');
+  for (const line of envContent.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#')) {
+      const eqIndex = trimmed.indexOf('=');
+      if (eqIndex > 0) {
+        const key = trimmed.slice(0, eqIndex).trim();
+        let value = trimmed.slice(eqIndex + 1).trim();
+        // Remove surrounding quotes if present
+        if ((value.startsWith('"') && value.endsWith('"')) ||
+            (value.startsWith("'") && value.endsWith("'"))) {
+          value = value.slice(1, -1);
+        }
+        if (!process.env[key]) {
+          process.env[key] = value;
+        }
+      }
+    }
+  }
+}
+
+// Use MCP_DATABASE_URL for external access (overrides Docker internal URLs)
+if (process.env.MCP_DATABASE_URL) {
+  process.env.DATABASE_URL = process.env.MCP_DATABASE_URL;
+  process.env.SERVICETITAN_DATABASE_URL = process.env.MCP_DATABASE_URL;
+}
+
+/**
+ *
  * Tool Categories:
  * - Estimates (15 tools)
  * - Customers (8 tools)
@@ -17,6 +56,7 @@
  * - Technicians (6 tools)
  * - Integrations (4 tools)
  * - AI/NLP (8 tools)
+ * - Pricebook (6 tools) - Update prices and push to ServiceTitan
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -49,6 +89,7 @@ import * as equipmentTools from './tools/equipment/index.js';
 import * as technicianTools from './tools/technicians/index.js';
 import * as integrationTools from './tools/integrations/index.js';
 import * as aiTools from './tools/ai/index.js';
+import * as pricebookTools from './tools/pricebook/index.js';
 
 // Configuration
 const API_BASE_URL = process.env.PRICEBOOK_API_URL || 'http://localhost:3001';
@@ -138,6 +179,9 @@ const ALL_TOOLS = [
   
   // AI/NLP Tools (8)
   ...collectTools(aiTools),
+
+  // Pricebook Tools (6)
+  ...collectTools(pricebookTools),
 ];
 
 // Legacy tools (keep for backwards compatibility)
@@ -264,11 +308,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const legacyToolHandlers = {
       'search_pricebook_legacy': async () => chatWithAgent(args.sessionId || DEFAULT_SESSION_ID, `search ${args.query}`),
       'list_categories': async () => chatWithAgent(DEFAULT_SESSION_ID, 'show categories'),
-      'get_materials': async () => apiRequest(`/api/pricebook/materials?category=${args.category || ''}&limit=${args.limit || 25}`),
-      'get_services': async () => apiRequest(`/api/pricebook/services?category=${args.category || ''}&limit=${args.limit || 25}`),
-      'get_equipment': async () => apiRequest(`/api/pricebook/equipment?limit=${args.limit || 25}`),
-      'get_sync_status': async () => apiRequest('/api/sync/pricebook/status'),
-      'trigger_sync': async () => apiRequest(`/api/sync/pricebook/${args.type}`, { method: 'POST' }),
+      'get_materials': async () => apiRequest(`/pricebook/materials?category=${args.category || ''}&limit=${args.limit || 25}`),
+      'get_services': async () => apiRequest(`/pricebook/services?category=${args.category || ''}&limit=${args.limit || 25}`),
+      'get_equipment': async () => apiRequest(`/pricebook/equipment?limit=${args.limit || 25}`),
+      'get_sync_status': async () => apiRequest('/health/detailed'),
+      'trigger_sync': async () => chatWithAgent(DEFAULT_SESSION_ID, 'sync pricebook'),
     };
     
     if (legacyToolHandlers[name]) {
@@ -328,7 +372,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
 
     switch (uri) {
       case 'pricebook://status':
-        data = await apiRequest('/api/sync/pricebook/status');
+        data = await apiRequest('/health/detailed');
         break;
 
       case 'pricebook://categories':
@@ -352,6 +396,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
             technicians: collectTools(technicianTools).length,
             integrations: collectTools(integrationTools).length,
             ai: collectTools(aiTools).length,
+            pricebook: collectTools(pricebookTools).length,
           },
           tools: COMBINED_TOOLS.map(t => ({ name: t.name, description: t.description })),
         };

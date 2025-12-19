@@ -46,11 +46,20 @@ export const stEndpoints = {
   // ═══════════════════════════════════════════════════════════════
 
   // Jobs (jpm)
+  // Supports query params: page, pageSize, includeTotal, ids, number, projectId, bookingId,
+  // jobStatus, appointmentStatus, priority, firstAppointmentStartsOnOrAfter, firstAppointmentStartsBefore,
+  // appointmentStartsOnOrAfter, appointmentStartsBefore, technicianId, customerId, locationId, soldById,
+  // jobTypeId, campaignId, businessUnitId, invoiceId, createdFromEstimateId, estimateIds,
+  // createdBefore, createdOnOrAfter, modifiedBefore, modifiedOnOrAfter, completedOnOrAfter, completedBefore,
+  // tagTypeIds, sort, externalDataApplicationGuid, externalDataKey, externalDataValues, hasUnusedAppointments
   jobs: {
     list: () => `${baseUrls.jpm}/jobs`,
     get: (id) => `${baseUrls.jpm}/jobs/${id}`,
     notes: (id) => `${baseUrls.jpm}/jobs/${id}/notes`,
     history: (id) => `${baseUrls.jpm}/jobs/${id}/history`,
+    // Query jobs by estimate - new fields
+    byEstimate: (estimateId) => `${baseUrls.jpm}/jobs?createdFromEstimateId=${estimateId}`,
+    withEstimates: (estimateIds) => `${baseUrls.jpm}/jobs?estimateIds=${Array.isArray(estimateIds) ? estimateIds.join(',') : estimateIds}`,
   },
 
   // Customers (crm)

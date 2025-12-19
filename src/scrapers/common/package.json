@@ -1,0 +1,18 @@
+{
+  "name": "@vendor-scrapers/common",
+  "version": "1.0.0",
+  "description": "Shared utilities for vendor scrapers",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./normalize": "./normalize/index.js",
+    "./utils/logger": "./utils/logger.js",
+    "./utils/http": "./utils/http.js",
+    "./utils/error": "./utils/error.js",
+    "./utils/scoring": "./utils/scoring.js",
+    "./config/env": "./config/env.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0"
+  }
+}

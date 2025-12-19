@@ -89,11 +89,11 @@ services:
     environment:
       - NODE_ENV=production
       - SERVICETITAN_DATABASE_URL=postgresql://postgres:Catchadmin@2025@postgres:5432/perfectcatch_automation
-      # Batch 10: GHL Sync Controls - DISABLED BY DEFAULT
-      - GHL_SYNC_ENABLED=false
-      - GHL_AUTO_SYNC_ESTIMATES=false
-      - GHL_AUTO_SYNC_JOBS=false
-      - GHL_AUTO_SYNC_CUSTOMERS=false
+      # GHL Sync Controls - ENABLED
+      - GHL_SYNC_ENABLED=true
+      - GHL_AUTO_SYNC_ESTIMATES=true
+      - GHL_AUTO_SYNC_JOBS=true
+      - GHL_AUTO_SYNC_CUSTOMERS=true
     networks:
       default:
       databasestack_default:
@@ -137,6 +137,12 @@ services:
     volumes:
       - ./logs:/app/logs
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "const fs = require('fs'); try { const stat = fs.statSync('/tmp/worker-heartbeat'); const age = Date.now() - stat.mtimeMs; process.exit(age < 120000 ? 0 : 1); } catch { process.exit(1); }"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     deploy:
       resources:
         limits:

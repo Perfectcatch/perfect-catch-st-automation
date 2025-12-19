@@ -7,6 +7,10 @@ import config from './config/index.js';
 import app from './app.js';
 import { logger } from './lib/logger.js';
 
+// GHL Sync Scheduler - loaded dynamically to prevent startup failures
+let startGHLSyncScheduler = null;
+let stopGHLSyncScheduler = null;
+
 const PORT = config.port;
 
 // Start server
@@ -26,11 +30,38 @@ const server = app.listen(PORT, () => {
 ║   API Docs:    http://localhost:${PORT}/                       ║
 ╚════════════════════════════════════════════════════════════╝
   `);
+
+  // Start GHL Sync Scheduler (every 5 minutes)
+  if (process.env.GHL_SYNC_ENABLED !== 'false') {
+    (async () => {
+      try {
+        const ghlSync = await import('./sync/ghl/index.js');
+        startGHLSyncScheduler = ghlSync.startGHLSyncScheduler;
+        stopGHLSyncScheduler = ghlSync.stopGHLSyncScheduler;
+        startGHLSyncScheduler();
+        logger.info('GHL Sync Scheduler started (every 5 minutes)');
+      } catch (error) {
+        logger.error({ error: error.message }, 'Failed to start GHL Sync Scheduler');
+      }
+    })();
+  } else {
+    logger.info('GHL Sync Scheduler disabled (GHL_SYNC_ENABLED=false)');
+  }
 });
 
 // Graceful shutdown handling
 function gracefulShutdown(signal) {
   logger.info({ signal }, 'Received shutdown signal');
+
+  // Stop GHL Sync Scheduler
+  if (stopGHLSyncScheduler) {
+    try {
+      stopGHLSyncScheduler();
+      logger.info('GHL Sync Scheduler stopped');
+    } catch (error) {
+      logger.error({ error: error.message }, 'Error stopping GHL Sync Scheduler');
+    }
+  }
 
   server.close(() => {
     logger.info('HTTP server closed');

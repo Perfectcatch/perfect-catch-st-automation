@@ -15,6 +15,7 @@ import {
   createExportHandler,
   createActionHandler,
 } from '../controllers/generic.controller.js';
+import { getAccessToken } from '../services/tokenManager.js';
 
 const router = Router();
 
@@ -90,5 +91,74 @@ router.get('/bulk/export', createExportHandler(stEndpoints.pricebookBulk.export)
 // IMAGES
 // ═══════════════════════════════════════════════════════════════
 router.post('/images', createActionHandler(stEndpoints.images.upload));
+
+// GET /pricebook/images?path=Images/Service/xxx.jpg
+// Proxies the ServiceTitan image endpoint and follows the 302 redirect
+router.get('/images', async (req, res) => {
+  try {
+    const { path: imagePath } = req.query;
+    
+    if (!imagePath) {
+      return res.status(400).json({ error: 'path query parameter is required' });
+    }
+    
+    const tenantId = process.env.SERVICE_TITAN_TENANT_ID;
+    const appKey = process.env.SERVICE_TITAN_APP_KEY;
+    const accessToken = await getAccessToken();
+    
+    // Call the ST images endpoint - it returns a 302 redirect
+    const url = `https://api.servicetitan.io/pricebook/v2/tenant/${tenantId}/images?path=${encodeURIComponent(imagePath)}`;
+    
+    // First request to get the redirect URL
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'ST-App-Key': appKey,
+      },
+      redirect: 'manual', // Don't follow redirect automatically
+    });
+    
+    // Determine content type from file extension
+    const ext = imagePath.split('.').pop()?.toLowerCase();
+    const contentTypes = {
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'gif': 'image/gif',
+      'webp': 'image/webp',
+    };
+    const defaultContentType = contentTypes[ext] || 'image/jpeg';
+    
+    // Handle 302 redirect
+    if (response.status === 302) {
+      const redirectUrl = response.headers.get('location');
+      if (redirectUrl) {
+        // Fetch the actual image from the redirect URL
+        const imageResponse = await fetch(redirectUrl);
+        if (imageResponse.ok) {
+          const buffer = Buffer.from(await imageResponse.arrayBuffer());
+          const contentType = imageResponse.headers.get('content-type') || defaultContentType;
+          res.set('Content-Type', contentType);
+          res.set('Cache-Control', 'public, max-age=86400');
+          return res.send(buffer);
+        }
+      }
+    }
+    
+    // If direct response with image data
+    if (response.ok) {
+      const buffer = Buffer.from(await response.arrayBuffer());
+      res.set('Content-Type', defaultContentType);
+      res.set('Cache-Control', 'public, max-age=86400');
+      return res.send(buffer);
+    }
+    
+    res.status(404).json({ error: 'Image not found', path: imagePath, status: response.status });
+  } catch (error) {
+    console.error('Image fetch error:', error.message);
+    res.status(500).json({ error: 'Failed to fetch image', message: error.message });
+  }
+});
 
 export default router;

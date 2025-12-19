@@ -1,0 +1,674 @@
+# 🚀 WINDSURF DEPLOYMENT PROMPT - BATCH 8: COMPLETE MCP EXPANSION (57 TOOLS)
+
+## CONTEXT
+
+You're deploying a complete AI-powered field service platform with **57 MCP tools** across 12 categories.
+
+**Special Focus:** Advanced estimate & sales tools with natural language processing.
+
+**Repository:** `/opt/perfectcatch-st-automation/mcp-server/`
+
+**Reference Documents:**
+- `BATCH_8_COMPLETE_MCP_OVERVIEW.md` - Architecture overview
+- `BATCH_8_PART_A_AI_ESTIMATION_ENGINE.md` - AI services (3 files)
+- `BATCH_8_PART_B_ESTIMATE_TOOLS.md` - Estimate tools (15 files)
+- `MCP_EXPANSION_PLAN.md` - Complete tool catalog
+
+---
+
+## YOUR MISSION
+
+Implement all 57 MCP tools in production-ready code with the following structure:
+
+```
+mcp-server/
+├── services/               # AI engines (NEW)
+│   ├── ai-estimator.js    # Complete AI estimation engine
+│   ├── pricebook-ai.js    # Intelligent pricebook search
+│   ├── nlp-parser.js      # Natural language processing
+│   ├── route-optimizer.js # Route optimization
+│   ├── customer-intel.js  # Customer intelligence
+│   └── analytics-engine.js # Analytics & forecasting
+│
+├── tools/
+│   ├── estimates/         # 15 estimate & sales tools (PRIORITY 1)
+│   ├── customers/         # 8 customer intelligence tools
+│   ├── scheduling/        # 12 smart scheduling tools
+│   ├── jobs/             # 10 job management tools
+│   ├── invoicing/        # 6 invoice & payment tools
+│   ├── analytics/        # 8 analytics & BI tools
+│   ├── messaging/        # 6 communication tools
+│   ├── workflows/        # 7 workflow automation tools
+│   ├── equipment/        # 5 equipment tracking tools
+│   ├── technicians/      # 6 technician tools
+│   ├── integrations/     # 4 integration tools
+│   └── ai/               # 8 AI/NLP tools
+│
+└── index.js              # Updated tool registry
+```
+
+---
+
+## PHASE 1: AI SERVICES LAYER (45 minutes)
+
+### 1.1 Create AI Estimator Service
+
+Create `mcp-server/services/ai-estimator.js` with complete implementation from `BATCH_8_PART_A`.
+
+**Key Features:**
+- `generateFromDescription()` - Parse natural language → find items → add materials → calculate pricing
+- `parseDescription()` - Use Claude to extract structured data from text
+- `findMatchingItems()` - AI-powered pricebook search
+- `suggestMaterials()` - Auto-add required materials
+- `calculateLabor()` - Estimate labor hours and costs
+- `suggestAddons()` - Recommend upgrades and options
+- `calculatePricing()` - Apply markup, discounts, tax
+- `findSimilarEstimates()` - Benchmark against historical data
+
+**Critical:** This is the brain of the entire estimation system. Every estimate tool depends on it.
+
+### 1.2 Create Pricebook AI Service
+
+Create `mcp-server/services/pricebook-ai.js`.
+
+**Key Features:**
+- `smartSearch()` - Fuzzy search with synonym expansion
+- `expandQuery()` - Generate search variations using Claude
+- `multiStrategySearch()` - Multiple search strategies (exact, LIKE, word match)
+- `rankResults()` - AI-powered relevance ranking
+- `getItemDetails()` - Item lookup with pricing
+- `getByCategory()` - Category-filtered search
+
+### 1.3 Create NLP Parser Service
+
+Create `mcp-server/services/nlp-parser.js`.
+
+**Key Features:**
+- `extractEntities()` - Pull out equipment, quantities, units, brands, models
+- `detectIntent()` - Understand what user wants to do
+
+### 1.4 Create Customer Intelligence Service
+
+Create `mcp-server/services/customer-intel.js`:
+
+```javascript
+import { PrismaClient } from '@prisma/client';
+import Anthropic from '@anthropic-ai/sdk';
+
+const prisma = new PrismaClient();
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+export class CustomerIntelligence {
+  
+  async getCustomerInsights(customerId) {
+    // Get all customer data
+    const [customer, jobs, estimates, invoices, messages] = await Promise.all([
+      prisma.st_customers.findUnique({ where: { st_id: BigInt(customerId) } }),
+      prisma.st_jobs.findMany({ where: { customer_id: BigInt(customerId) } }),
+      prisma.st_estimates.findMany({ where: { customer_id: BigInt(customerId) } }),
+      prisma.st_invoices.findMany({ where: { customer_id: BigInt(customerId) } }),
+      prisma.messaging_log.findMany({ where: { customer_id: BigInt(customerId) } })
+    ]);
+    
+    // Calculate metrics
+    const lifetimeValue = invoices.reduce((sum, inv) => sum + Number(inv.total), 0);
+    const jobCount = jobs.length;
+    const avgTicket = jobCount > 0 ? lifetimeValue / jobCount : 0;
+    const lastService = jobs.length > 0 ? jobs[jobs.length - 1].st_created_on : null;
+    
+    // Predict next service date using AI
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 512,
+      system: 'You are a customer service prediction expert. Analyze customer history and predict when they will need service next.',
+      messages: [{
+        role: 'user',
+        content: `Customer has had ${jobCount} jobs over the last 2 years. Last service: ${lastService}. Service types: pool maintenance. When will they likely need service next? Return JSON: { nextServiceDate: "YYYY-MM-DD", confidence: 0-1, reason: "..." }`
+      }]
+    });
+    
+    const prediction = JSON.parse(response.content[0].text.match(/\{[\s\S]*\}/)?.[0] || '{}');
+    
+    // Calculate churn risk
+    const daysSinceService = lastService ? 
+      (Date.now() - new Date(lastService).getTime()) / (1000 * 60 * 60 * 24) : 999;
+    const riskScore = Math.min(daysSinceService / 180, 1.0); // High risk after 6 months
+    
+    return {
+      customerId,
+      customerName: customer.name,
+      lifetimeValue,
+      jobCount,
+      avgTicket,
+      lastService,
+      nextPredictedService: prediction.nextServiceDate,
+      daysSinceLastService: Math.floor(daysSinceService),
+      riskScore,
+      segment: this.determineSegment(lifetimeValue, riskScore),
+      recommendedActions: this.getRecommendedActions(riskScore, daysSinceService)
+    };
+  }
+  
+  determineSegment(ltv, risk) {
+    if (ltv > 10000 && risk < 0.3) return 'VIP - Active';
+    if (ltv > 10000 && risk >= 0.3) return 'VIP - At Risk';
+    if (ltv > 5000 && risk < 0.3) return 'High Value';
+    if (ltv > 5000 && risk >= 0.3) return 'High Value - At Risk';
+    if (risk >= 0.7) return 'Churning';
+    return 'Standard';
+  }
+  
+  getRecommendedActions(risk, daysSince) {
+    const actions = [];
+    
+    if (risk > 0.7) {
+      actions.push('URGENT: Schedule win-back call');
+      actions.push('Offer seasonal discount');
+    } else if (risk > 0.5) {
+      actions.push('Send check-in message');
+      actions.push('Offer maintenance plan');
+    }
+    
+    if (daysSince > 90) {
+      actions.push('Schedule preventive maintenance');
+    }
+    
+    return actions;
+  }
+  
+  async searchCustomers(params) {
+    const { query, fuzzyMatch = true, includeInactive = false } = params;
+    
+    // Build search
+    let where = {};
+    
+    if (!includeInactive) {
+      where.active = true;
+    }
+    
+    if (fuzzyMatch) {
+      // Search across multiple fields
+      where.OR = [
+        { name: { contains: query, mode: 'insensitive' } },
+        { email: { contains: query, mode: 'insensitive' } },
+        { phone: { contains: query, mode: 'insensitive' } },
+        { address_line1: { contains: query, mode: 'insensitive' } }
+      ];
+    } else {
+      where.name = { contains: query, mode: 'insensitive' };
+    }
+    
+    const customers = await prisma.st_customers.findMany({
+      where,
+      take: 20,
+      orderBy: { name: 'asc' }
+    });
+    
+    return customers;
+  }
+}
+
+export const customerIntel = new CustomerIntelligence();
+```
+
+### 1.5 Create Route Optimizer Service
+
+Create `mcp-server/services/route-optimizer.js`:
+
+```javascript
+export class RouteOptimizer {
+  
+  async optimizeRoute(params) {
+    const { technicianId, appointmentIds, startLocation, date } = params;
+    
+    // Get appointments with locations
+    const appointments = await prisma.st_appointments.findMany({
+      where: {
+        st_id: { in: appointmentIds.map(id => BigInt(id)) }
+      },
+      include: {
+        job: {
+          include: {
+            location: true
+          }
+        }
+      }
+    });
+    
+    // Extract coordinates
+    const locations = appointments.map(apt => ({
+      id: Number(apt.st_id),
+      lat: apt.job.location.latitude,
+      lng: apt.job.location.longitude,
+      duration: 60 // Default 1 hour
+    }));
+    
+    // Add start location
+    locations.unshift({
+      id: 'start',
+      ...startLocation,
+      duration: 0
+    });
+    
+    // Calculate distances between all points
+    const distances = await this.calculateDistanceMatrix(locations);
+    
+    // Solve TSP (Traveling Salesman Problem) using nearest neighbor
+    const route = this.solveTSP(distances);
+    
+    // Calculate total time
+    const totalDriveTime = route.reduce((sum, leg) => sum + leg.driveTime, 0);
+    const totalJobTime = locations.reduce((sum, loc) => sum + loc.duration, 0);
+    const totalTime = totalDriveTime + totalJobTime;
+    
+    return {
+      optimizedOrder: route.map(leg => leg.toId),
+      totalDriveTime,
+      totalJobTime,
+      totalTime,
+      distanceMiles: route.reduce((sum, leg) => sum + leg.distanceMiles, 0),
+      route
+    };
+  }
+  
+  calculateDistanceMatrix(locations) {
+    // Calculate straight-line distance between all points
+    const matrix = {};
+    
+    for (let i = 0; i < locations.length; i++) {
+      for (let j = 0; j < locations.length; j++) {
+        if (i === j) continue;
+        
+        const from = locations[i];
+        const to = locations[j];
+        
+        const distanceMiles = this.haversineDistance(
+          from.lat, from.lng,
+          to.lat, to.lng
+        );
+        
+        // Estimate drive time (avg 30 mph)
+        const driveMinutes = (distanceMiles / 30) * 60;
+        
+        matrix[`${from.id}-${to.id}`] = {
+          distanceMiles,
+          driveMinutes
+        };
+      }
+    }
+    
+    return matrix;
+  }
+  
+  haversineDistance(lat1, lon1, lat2, lon2) {
+    const R = 3959; // Earth radius in miles
+    const dLat = this.toRad(lat2 - lat1);
+    const dLon = this.toRad(lon2 - lon1);
+    
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(this.toRad(lat1)) * Math.cos(this.toRad(lat2)) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  }
+  
+  toRad(degrees) {
+    return degrees * Math.PI / 180;
+  }
+  
+  solveTSP(distances) {
+    // Nearest neighbor algorithm
+    const route = [];
+    let current = 'start';
+    const visited = new Set([current]);
+    const allIds = Object.keys(distances)
+      .map(key => key.split('-')[1])
+      .filter((v, i, a) => a.indexOf(v) === i && v !== 'start');
+    
+    while (visited.size < allIds.length + 1) {
+      let nearest = null;
+      let shortestDistance = Infinity;
+      
+      for (const id of allIds) {
+        if (visited.has(id)) continue;
+        
+        const key = `${current}-${id}`;
+        const dist = distances[key];
+        
+        if (dist && dist.distanceMiles < shortestDistance) {
+          shortestDistance = dist.distanceMiles;
+          nearest = id;
+        }
+      }
+      
+      if (nearest) {
+        route.push({
+          fromId: current,
+          toId: nearest,
+          distanceMiles: distances[`${current}-${nearest}`].distanceMiles,
+          driveTime: distances[`${current}-${nearest}`].driveMinutes
+        });
+        
+        visited.add(nearest);
+        current = nearest;
+      } else {
+        break;
+      }
+    }
+    
+    return route;
+  }
+}
+
+export const routeOptimizer = new RouteOptimizer();
+```
+
+---
+
+## PHASE 2: ESTIMATE TOOLS (30 minutes)
+
+Create all 15 estimate tools from `BATCH_8_PART_B_ESTIMATE_TOOLS.md`:
+
+### Tools to Create:
+1. `generate-estimate-from-description.js` ⭐ **MOST IMPORTANT**
+2. `add-items-to-estimate.js`
+3. `search-pricebook.js`
+4. `build-interactive-estimate.js`
+5. `get-similar-estimates.js`
+6. `clone-estimate.js`
+7. `update-estimate-status.js`
+8. `send-estimate-to-customer.js`
+9. `get-estimate-details.js`
+10. `delete-estimate-item.js`
+11. `apply-discount-to-estimate.js`
+12. `calculate-estimate-profit.js`
+13. `get-estimate-analytics.js`
+14. `compare-estimates.js`
+15. `generate-estimate-variations.js`
+
+**Each tool exports:**
+```javascript
+export const toolName = {
+  name: 'tool_name',
+  description: '...',
+  inputSchema: { ... },
+  async handler(params) { ... }
+};
+```
+
+---
+
+## PHASE 3: CUSTOMER TOOLS (20 minutes)
+
+Create `mcp-server/tools/customers/` with 8 tools:
+
+1. **get-customer-insights.js**
+```javascript
+import { customerIntel } from '../../services/customer-intel.js';
+
+export const getCustomerInsights = {
+  name: 'get_customer_insights',
+  description: 'Get complete customer intelligence: lifetime value, churn risk, predictions, recommended actions',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      customerId: { type: 'number' }
+    },
+    required: ['customerId']
+  },
+  async handler(params) {
+    const insights = await customerIntel.getCustomerInsights(params.customerId);
+    return { success: true, insights };
+  }
+};
+```
+
+2. **search-customers.js** - Fuzzy customer search
+3. **find-similar-customers.js** - Find customers with similar profiles
+4. **get-customers-by-segment.js** - Get customers by segment (VIP, at-risk, etc.)
+5. **get-customers-needing-followup.js** - Find customers needing attention
+6. **get-customer-timeline.js** - Complete history timeline
+7. **can-contact-customer.js** - Check opt-in status
+8. **update-customer-preferences.js** - Update communication preferences
+
+---
+
+## PHASE 4: SCHEDULING TOOLS (30 minutes)
+
+Create `mcp-server/tools/scheduling/` with 12 tools:
+
+1. **get-smart-availability.js** - AI-powered slot recommendations
+2. **optimize-route.js** - Route optimization for multiple appointments
+3. **auto-schedule-job.js** - Automatically find and book best slot
+4. **reschedule-appointment.js** - Reschedule with minimal disruption
+5. **find-emergency-slot.js** - Find ASAP availability
+6. **get-technician-availability.js** - Check tech availability
+7. **get-technician-capacity.js** - How many more jobs can fit
+8. **get-dispatch-board.js** - Full day view for business unit
+9. **check-scheduling-conflicts.js** - Detect conflicts
+10. **get-appointment-details.js** - Complete appointment info
+11. **batch-schedule-jobs.js** - Schedule multiple jobs at once
+12. **get-technician-calendar.js** - Calendar view for technician
+
+---
+
+## PHASE 5: REMAINING TOOLS (60 minutes)
+
+### Jobs (10 tools in `mcp-server/tools/jobs/`)
+- get-job-details, update-job-status, add-job-note, complete-job
+- predict-job-duration, get-job-recommendations, find-related-jobs
+- get-job-profitability, search-jobs, get-job-analytics
+
+### Invoicing (6 tools in `mcp-server/tools/invoicing/`)
+- create-invoice-from-job, get-invoice-details, update-invoice-status
+- send-invoice-reminder, record-payment, get-outstanding-invoices
+
+### Analytics (8 tools in `mcp-server/tools/analytics/`)
+- get-kpi-dashboard, get-revenue-analytics, get-technician-performance
+- get-customer-analytics, forecast-revenue, forecast-capacity-needs
+- get-trending-services, get-seasonal-patterns
+
+### Messaging (6 tools in `mcp-server/tools/messaging/`)
+- send-message, send-bulk-messages, get-message-history
+- create-campaign, get-campaign-performance, get-template-library
+
+### Workflows (7 tools in `mcp-server/tools/workflows/`)
+- create-workflow, get-active-workflows, control-workflow
+- get-workflow-analytics, test-workflow, get-workflow-history
+- list-available-triggers
+
+### Equipment (5 tools in `mcp-server/tools/equipment/`)
+- get-customer-equipment, add-equipment, get-equipment-history
+- predict-equipment-failure, check-inventory
+
+### Technicians (6 tools in `mcp-server/tools/technicians/`)
+- get-my-schedule, clock-in-out, get-next-appointment
+- report-issue, search-knowledge-base, lookup-parts
+
+### Integrations (4 tools in `mcp-server/tools/integrations/`)
+- sync-to-quickbooks, track-google-ads-conversion
+- sync-to-ghl, register-webhook
+
+### AI/NLP (8 tools in `mcp-server/tools/ai/`)
+- transcribe-call, extract-intent, create-job-from-voice
+- voice-get-availability, parse-nl-query, generate-response
+- analyze-sentiment, extract-entities
+
+---
+
+## PHASE 6: UPDATE TOOL REGISTRY (15 minutes)
+
+Update `mcp-server/index.js` to register all 57 tools:
+
+```javascript
+// Import all tools
+import { generateEstimateFromDescription } from './tools/estimates/generate-estimate-from-description.js';
+import { addItemsToEstimate } from './tools/estimates/add-items-to-estimate.js';
+// ... import all 57 tools
+
+// Register tools
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: [
+    // Estimates (15)
+    generateEstimateFromDescription,
+    addItemsToEstimate,
+    // ... all estimate tools
+    
+    // Customers (8)
+    getCustomerInsights,
+    // ... all customer tools
+    
+    // Scheduling (12)
+    getSmartAvailability,
+    // ... all scheduling tools
+    
+    // Jobs (10)
+    // Invoicing (6)
+    // Analytics (8)
+    // Messaging (6)
+    // Workflows (7)
+    // Equipment (5)
+    // Technicians (6)
+    // Integrations (4)
+    // AI/NLP (8)
+  ]
+}));
+
+// Handle tool calls
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const { name, arguments: args } = request.params;
+  
+  // Find and execute tool
+  const toolMap = {
+    'generate_estimate_from_description': generateEstimateFromDescription,
+    'add_items_to_estimate': addItemsToEstimate,
+    // ... all 57 tools
+  };
+  
+  const tool = toolMap[name];
+  if (!tool) {
+    throw new Error(`Unknown tool: ${name}`);
+  }
+  
+  const result = await tool.handler(args);
+  
+  return {
+    content: [{
+      type: 'text',
+      text: JSON.stringify(result, null, 2)
+    }]
+  };
+});
+```
+
+---
+
+## VERIFICATION CHECKLIST
+
+After deployment:
+
+### Services
+- [ ] 6 service files created in `services/`
+- [ ] All services export classes/functions
+- [ ] Services can be imported by tools
+
+### Tools
+- [ ] 57 tool files created (organized by category)
+- [ ] Each tool has name, description, inputSchema, handler
+- [ ] All tools registered in index.js
+
+### Testing
+- [ ] Can call `generate_estimate_from_description`
+- [ ] Can call `search_pricebook`
+- [ ] Can call `get_customer_insights`
+- [ ] Can call `optimize_route`
+
+### Integration
+- [ ] MCP server starts without errors
+- [ ] Claude Desktop can see all 57 tools
+- [ ] Tools can call services
+- [ ] Services can access database
+
+---
+
+## TESTING PROCEDURE
+
+### Test 1: AI Estimation
+```javascript
+// In Claude Desktop:
+"Generate an estimate for customer 123: replace pool heater 400k BTU"
+
+// Should call generate_estimate_from_description
+// Should return complete estimate with items, materials, labor, pricing
+```
+
+### Test 2: Pricebook Search
+```javascript
+"Search for pump equipment in the pricebook"
+
+// Should call search_pricebook
+// Should return relevant items with alternatives
+```
+
+### Test 3: Customer Intelligence
+```javascript
+"Show me insights for customer 456"
+
+// Should call get_customer_insights
+// Should return LTV, churn risk, predictions, recommendations
+```
+
+### Test 4: Route Optimization
+```javascript
+"Optimize route for technician 5 with appointments 100, 101, 102"
+
+// Should call optimize_route
+// Should return optimized order with drive times
+```
+
+---
+
+## OUTPUT REQUIREMENTS
+
+After completion, provide:
+
+1. **File Count**
+   - Services: 6 files
+   - Tools: 57 files
+   - Total: 63 files
+
+2. **Tool Registry**
+   - List all 57 registered tools
+   - Confirm no registration errors
+
+3. **Test Results**
+   - AI estimation test result
+   - Pricebook search test result
+   - Customer insights test result
+   - Route optimization test result
+
+4. **Sample Usage**
+   - Show 5 example conversations using the new tools
+
+---
+
+## CRITICAL SUCCESS FACTORS
+
+1. **AI Estimator is the foundation** - Everything depends on it working
+2. **Pricebook search must be intelligent** - Fuzzy matching is essential
+3. **All tools must handle errors gracefully** - Return {success: false, error: "..."} on failure
+4. **Services must be reusable** - Multiple tools will call the same services
+5. **Tool descriptions must be clear** - Claude needs to understand when to use each tool
+
+---
+
+## BEGIN DEPLOYMENT
+
+Start with Phase 1 (AI Services) and proceed systematically.
+
+This is the largest single deployment - **57 tools + 6 services = 63 files**.
+
+**Estimated time:** 3-4 hours for complete implementation.
+
+After this, you'll have a **world-class AI-powered field service command center**!

@@ -20,10 +20,18 @@ import { ConflictResolver } from './conflict-resolver.js';
 
 const logger = createLogger('pricebook-sync');
 
+// Map plural entity types (used internally) to singular (stored in DB)
+const ENTITY_TYPE_TO_SINGULAR = {
+  categories: 'category',
+  materials: 'material',
+  services: 'service',
+  equipment: 'equipment',
+};
+
 /**
  * @typedef {Object} SyncOptions
  * @property {'from_st' | 'to_st' | 'bidirectional'} direction - Sync direction
- * @property {('categories' | 'materials' | 'services' | 'equipment')[]} [entityTypes] - Entity types to sync
+ * @property {('categories' | 'materials' | 'services' | 'equipment')[]} [entityTypes] - Entity types to sync (plural names)
  * @property {boolean} [fullSync] - Full sync vs incremental
  * @property {'keep_st' | 'keep_local' | 'manual'} [resolveConflicts] - Conflict resolution strategy
  * @property {boolean} [dryRun] - Preview changes without applying
@@ -87,7 +95,7 @@ export class PricebookSyncEngine {
     const startTime = Date.now();
     const {
       direction = 'from_st',
-      entityTypes = ['category', 'material', 'service', 'equipment'],
+      entityTypes = ['categories', 'materials', 'services', 'equipment'],
       fullSync = false,
       resolveConflicts = 'manual',
       dryRun = false,
@@ -96,12 +104,13 @@ export class PricebookSyncEngine {
 
     this.logger.info({ direction, entityTypes, fullSync, dryRun }, 'Starting pricebook sync');
 
-    // Create sync log entry
+    // Create sync log entry (convert plural to singular for DB storage)
+    const entityTypesForDb = entityTypes.map(t => ENTITY_TYPE_TO_SINGULAR[t] || t);
     const syncLog = await this.prisma.pricebookSyncLog.create({
       data: {
         syncType: fullSync ? 'full' : 'incremental',
         direction,
-        entityTypes,
+        entityTypes: entityTypesForDb,
         status: 'running',
         triggeredBy,
         config: options,
@@ -127,8 +136,8 @@ export class PricebookSyncEngine {
 
     try {
       // Sync in order (categories first due to foreign keys)
-      if (entityTypes.includes('category')) {
-        const categoryResult = await this.syncEntity('category', {
+      if (entityTypes.includes('categories')) {
+        const categoryResult = await this.syncEntity('categories', {
           direction,
           fullSync,
           resolveConflicts,
@@ -138,8 +147,8 @@ export class PricebookSyncEngine {
         this.mergeResults(result, categoryResult);
       }
 
-      if (entityTypes.includes('material')) {
-        const materialResult = await this.syncEntity('material', {
+      if (entityTypes.includes('materials')) {
+        const materialResult = await this.syncEntity('materials', {
           direction,
           fullSync,
           resolveConflicts,
@@ -149,8 +158,8 @@ export class PricebookSyncEngine {
         this.mergeResults(result, materialResult);
       }
 
-      if (entityTypes.includes('service')) {
-        const serviceResult = await this.syncEntity('service', {
+      if (entityTypes.includes('services')) {
+        const serviceResult = await this.syncEntity('services', {
           direction,
           fullSync,
           resolveConflicts,

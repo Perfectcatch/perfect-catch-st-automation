@@ -199,9 +199,11 @@ export class EventDetector extends EventEmitter {
       const lastCheck = this.lastCheck.jobs;
 
       const result = await client.query(`
-        SELECT j.*, c.name as customer_name, c.phone as customer_phone, c.email as customer_email
+        SELECT j.*, c.name as customer_name, c.phone as customer_phone, c.email as customer_email,
+               bu.name as business_unit_name
         FROM st_jobs j
         LEFT JOIN st_customers c ON j.customer_id = c.st_id
+        LEFT JOIN st_business_units bu ON j.business_unit_id = bu.st_id
         WHERE j.st_created_on > $1 OR j.st_modified_on > $1
         ORDER BY j.st_created_on DESC
       `, [lastCheck]);
@@ -214,6 +216,7 @@ export class EventDetector extends EventEmitter {
             customerId: Number(job.customer_id),
             jobNumber: job.job_number,
             status: job.job_status,
+            businessUnit: job.business_unit_name,
             customer: {
               name: job.customer_name,
               phone: job.customer_phone,
@@ -222,7 +225,31 @@ export class EventDetector extends EventEmitter {
             job
           });
 
-          logger.info('Event: job_created', { jobId: Number(job.st_id) });
+          logger.info('Event: job_created', { jobId: Number(job.st_id), businessUnit: job.business_unit_name });
+
+          // Detect Install jobs - emit special event
+          if (job.business_unit_name && job.business_unit_name.includes('Install')) {
+            this.emit('install_job_created', {
+              jobId: Number(job.st_id),
+              customerId: Number(job.customer_id),
+              jobNumber: job.job_number,
+              status: job.job_status,
+              businessUnit: job.business_unit_name,
+              customer: {
+                name: job.customer_name,
+                phone: job.customer_phone,
+                email: job.customer_email
+              },
+              job
+            });
+
+            logger.info('🔧 INSTALL JOB DETECTED', {
+              jobId: Number(job.st_id),
+              jobNumber: job.job_number,
+              customerName: job.customer_name,
+              businessUnit: job.business_unit_name
+            });
+          }
         }
 
         // Job completed
@@ -231,6 +258,7 @@ export class EventDetector extends EventEmitter {
             jobId: Number(job.st_id),
             customerId: Number(job.customer_id),
             completedAt: job.job_completion_time,
+            businessUnit: job.business_unit_name,
             customer: {
               name: job.customer_name,
               phone: job.customer_phone,

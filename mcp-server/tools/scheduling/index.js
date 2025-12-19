@@ -279,7 +279,7 @@ export const findEmergencySlot = {
 // Tool 7: Get Dispatch Board
 export const getDispatchBoard = {
   name: 'get_dispatch_board',
-  description: 'Get the full dispatch board view for a date',
+  description: 'Get the full dispatch board view for a date with technician assignments',
   inputSchema: {
     type: 'object',
     properties: {
@@ -288,57 +288,87 @@ export const getDispatchBoard = {
     }
   },
   async handler(params) {
-    const client = await getPool().connect();
+    const API_BASE = process.env.PRICEBOOK_API_URL || 'http://localhost:3001';
+    const date = params.date === 'today' ? new Date().toISOString().split('T')[0] : params.date;
+
     try {
-      const date = params.date === 'today' ? new Date().toISOString().split('T')[0] : params.date;
-      
-      const result = await client.query(`
-        SELECT 
-          t.st_id as technician_id,
-          t.name as technician_name,
-          a.st_id as appointment_id,
-          a.start_on,
-          a.end_on,
-          a.status,
-          j.job_number,
-          c.name as customer_name
-        FROM st_technicians t
-        LEFT JOIN st_appointments a ON t.st_id = ANY(a.technician_ids) AND DATE(a.start_on) = $1
-        LEFT JOIN st_jobs j ON a.job_id = j.st_id
-        LEFT JOIN st_customers c ON j.customer_id = c.st_id
-        WHERE t.active = true
-        ORDER BY t.name, a.start_on
-      `, [date]);
-      
-      // Group by technician
-      const board = {};
-      for (const row of result.rows) {
-        const techId = Number(row.technician_id);
-        if (!board[techId]) {
-          board[techId] = { id: techId, name: row.technician_name, appointments: [] };
-        }
-        if (row.appointment_id) {
-          board[techId].appointments.push({
-            id: Number(row.appointment_id),
-            start: row.start_on,
-            end: row.end_on,
-            status: row.status,
-            jobNumber: row.job_number,
-            customerName: row.customer_name
-          });
-        }
+      // Call the internal API which fetches from ST API with technician assignments
+      const response = await fetch(`${API_BASE}/scheduling/dispatch/status?date=${date}`);
+      const dispatchData = await response.json();
+
+      if (!dispatchData.appointments) {
+        // Fallback: get technicians from database
+        const client = await getPool().connect();
+        try {
+          const techResult = await client.query(
+            'SELECT st_id, name FROM st_technicians WHERE active = true ORDER BY name'
+          );
+          return {
+            success: true,
+            date,
+            technicians: techResult.rows.map(t => ({
+              id: Number(t.st_id),
+              name: t.name,
+              appointments: []
+            })),
+            summary: { totalTechnicians: techResult.rows.length, totalAppointments: 0 }
+          };
+        } finally { client.release(); }
       }
-      
-      return {
-        success: true,
-        date,
-        technicians: Object.values(board),
-        summary: {
-          totalTechnicians: Object.keys(board).length,
-          totalAppointments: result.rows.filter(r => r.appointment_id).length
+
+      // Group appointments by technician
+      const board = {};
+      const allAppointments = [
+        ...(dispatchData.appointments?.scheduled || []),
+        ...(dispatchData.appointments?.dispatched || []),
+        ...(dispatchData.appointments?.working || []),
+        ...(dispatchData.appointments?.completed || [])
+      ];
+
+      // Get technicians from database
+      const client = await getPool().connect();
+      try {
+        const techResult = await client.query(
+          'SELECT st_id, name FROM st_technicians WHERE active = true ORDER BY name'
+        );
+
+        // Initialize all technicians
+        for (const tech of techResult.rows) {
+          board[tech.st_id] = { id: Number(tech.st_id), name: tech.name, appointments: [] };
         }
-      };
-    } finally { client.release(); }
+
+        // Assign appointments to technicians
+        for (const apt of allAppointments) {
+          const technicians = apt.technicians || [];
+          for (const tech of technicians) {
+            const techId = tech.technicianId;
+            if (!board[techId]) {
+              board[techId] = { id: techId, name: tech.technicianName, appointments: [] };
+            }
+            board[techId].appointments.push({
+              id: apt.appointmentId,
+              start: apt.start,
+              end: apt.end,
+              status: apt.status,
+              jobNumber: apt.jobNumber || String(apt.jobId),
+              customerName: apt.customerName || 'Unknown'
+            });
+          }
+        }
+
+        return {
+          success: true,
+          date,
+          technicians: Object.values(board),
+          summary: {
+            totalTechnicians: Object.keys(board).length,
+            totalAppointments: allAppointments.length
+          }
+        };
+      } finally { client.release(); }
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
   }
 };
 

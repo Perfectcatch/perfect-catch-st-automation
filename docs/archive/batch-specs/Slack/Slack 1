@@ -1,0 +1,996 @@
+# 🚀 BATCH 9: ADVANCED SLACK INTEGRATION
+
+## Overview
+
+Transform Slack into your **command center** for field service operations. Get real-time notifications, interact with your system conversationally, and empower your entire team.
+
+---
+
+## WHAT THIS ENABLES
+
+### **For You (Owner/Manager):**
+```
+Slack: "What's my revenue today?"
+Bot: "$12,450 from 8 completed jobs
+     • Pool Service: $8,200 (5 jobs)
+     • Electric: $4,250 (3 jobs)"
+
+Slack: "Show me customers at risk"
+Bot: "🚨 12 high-value customers haven't been serviced in 90+ days:
+     • John Smith - $15K LTV - last service 120 days ago
+     • Mary Johnson - $12K LTV - last service 95 days ago
+     [View All]"
+
+Slack: "Generate quote for pool heater replacement"
+Bot: "📋 Quote #10234 created: $4,200
+     • Hayward 400k BTU Heater
+     • Installation labor (4 hrs)
+     • Permits & materials
+     [View Quote] [Send to Customer]"
+```
+
+### **For Dispatchers:**
+```
+Slack: "Schedule emergency call at 123 Main St"
+Bot: "🚨 Emergency job created
+     Best availability: Tech Mike - 2:30 PM (45 min away)
+     [Confirm] [Find Alternative]"
+
+Slack: "Who's available tomorrow afternoon?"
+Bot: "3 technicians available:
+     • Mike - 4 slots (2pm-6pm)
+     • John - 2 slots (3pm-5pm)
+     • Sarah - 6 slots (1pm-6pm)"
+```
+
+### **For Technicians:**
+```
+Slack: "What's my schedule today?"
+Bot: "📅 You have 5 jobs today:
+     ✅ 8am - Pool cleaning - 123 Oak St
+     ⏰ 10am - Heater repair - 456 Elm St (NEXT)
+     • 1pm - Filter replacement - 789 Pine St
+     • 3pm - Inspection - 321 Maple Ave
+     • 5pm - Emergency call - 654 River Rd"
+
+Slack: "I need parts for job 12345"
+Bot: "🔧 Job #12345 - Pool pump repair
+     Need parts? Here's what's in inventory:
+     • Pump impeller (3 in stock)
+     • Seal kit (5 in stock)
+     [Request Parts] [Call Shop]"
+```
+
+### **For CSRs:**
+```
+Slack: "Customer John Smith is calling about estimate"
+Bot: "📋 John Smith - Estimate #10234
+     Status: Open
+     Amount: $4,200
+     Sent: 3 days ago (not opened)
+     [Resend] [Call Customer] [View Details]"
+```
+
+---
+
+## ARCHITECTURE
+
+### **Components**
+
+```
+Slack Workspace
+    ↓
+Slack App (OAuth)
+    ↓
+Your API Server
+├── Slack Event Handler (receives messages, commands)
+├── Slack Notification Service (sends messages)
+├── Slack Interactive Handler (buttons, modals)
+└── Slack Bot (conversational AI)
+    ↓
+Your Database + MCP Tools
+```
+
+### **Features**
+
+**1. Slash Commands**
+- `/quote [description]` - Generate estimate
+- `/schedule [job]` - Schedule job
+- `/customer [search]` - Find customer
+- `/status` - Check system status
+- `/revenue` - Today's revenue
+
+**2. Interactive Messages**
+- Button actions (Approve, Reject, Schedule)
+- Select menus (Assign technician)
+- Modal forms (Create job)
+
+**3. Real-Time Notifications**
+- New job created → #dispatch
+- Estimate approved → #sales
+- Emergency call → @oncall
+- Job completed → #accounting
+- Payment received → #accounting
+
+**4. Conversational Bot**
+- Natural language queries
+- Uses Claude AI to understand
+- Calls MCP tools to execute
+- Responds in Slack
+
+**5. Channel Organization**
+```
+#dispatch - Real-time job updates
+#sales - Estimates and quotes
+#accounting - Invoices and payments
+#emergencies - Urgent calls
+#technicians - Tech-specific channel
+#reports - Daily/weekly reports
+```
+
+---
+
+## IMPLEMENTATION
+
+### File 1: Slack App Setup
+
+**File:** `src/integrations/slack/slack-client.js`
+
+```javascript
+import { WebClient } from '@slack/web-api';
+import { createEventAdapter } from '@slack/events-api';
+import { createMessageAdapter } from '@slack/interactive-messages';
+
+export class SlackClient {
+  constructor() {
+    this.web = new WebClient(process.env.SLACK_BOT_TOKEN);
+    this.events = createEventAdapter(process.env.SLACK_SIGNING_SECRET);
+    this.interactive = createMessageAdapter(process.env.SLACK_SIGNING_SECRET);
+    
+    this.setupEventListeners();
+  }
+  
+  setupEventListeners() {
+    // App mentions (@bot)
+    this.events.on('app_mention', async (event) => {
+      await this.handleMention(event);
+    });
+    
+    // Direct messages
+    this.events.on('message', async (event) => {
+      if (event.channel_type === 'im') {
+        await this.handleDirectMessage(event);
+      }
+    });
+    
+    // Slash commands handled in routes
+    
+    // Button clicks
+    this.interactive.action({ type: 'button' }, async (payload, respond) => {
+      await this.handleButtonClick(payload, respond);
+    });
+    
+    // Select menus
+    this.interactive.action({ type: 'select' }, async (payload, respond) => {
+      await this.handleSelectMenu(payload, respond);
+    });
+  }
+  
+  async handleMention(event) {
+    const { user, text, channel } = event;
+    
+    // Remove bot mention from text
+    const query = text.replace(/<@[A-Z0-9]+>/g, '').trim();
+    
+    // Use conversational AI to understand and respond
+    const response = await this.processConversationalQuery(query, { user, channel });
+    
+    await this.sendMessage(channel, response);
+  }
+  
+  async handleDirectMessage(event) {
+    const { user, text, channel } = event;
+    
+    // Process as conversational query
+    const response = await this.processConversationalQuery(text, { user, channel });
+    
+    await this.sendMessage(channel, response);
+  }
+  
+  async processConversationalQuery(query, context) {
+    // Use Claude to understand query and determine action
+    const { conversationalBot } = await import('./conversational-bot.js');
+    return await conversationalBot.process(query, context);
+  }
+  
+  async sendMessage(channel, content) {
+    const options = typeof content === 'string' 
+      ? { text: content }
+      : content;
+    
+    await this.web.chat.postMessage({
+      channel,
+      ...options
+    });
+  }
+  
+  async sendEphemeral(channel, user, content) {
+    const options = typeof content === 'string'
+      ? { text: content }
+      : content;
+    
+    await this.web.chat.postEphemeral({
+      channel,
+      user,
+      ...options
+    });
+  }
+  
+  async updateMessage(channel, ts, content) {
+    const options = typeof content === 'string'
+      ? { text: content }
+      : content;
+    
+    await this.web.chat.update({
+      channel,
+      ts,
+      ...options
+    });
+  }
+  
+  async openModal(trigger_id, view) {
+    await this.web.views.open({
+      trigger_id,
+      view
+    });
+  }
+  
+  async getUserInfo(userId) {
+    const result = await this.web.users.info({ user: userId });
+    return result.user;
+  }
+  
+  async getChannelInfo(channelId) {
+    const result = await this.web.conversations.info({ channel: channelId });
+    return result.channel;
+  }
+}
+
+export const slackClient = new SlackClient();
+```
+
+---
+
+### File 2: Conversational Bot (AI-Powered)
+
+**File:** `src/integrations/slack/conversational-bot.js`
+
+```javascript
+import Anthropic from '@anthropic-ai/sdk';
+import { slackClient } from './slack-client.js';
+import { PrismaClient } from '@prisma/client';
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const prisma = new PrismaClient();
+
+export class ConversationalBot {
+  
+  async process(query, context) {
+    try {
+      // Get user context
+      const slackUser = await slackClient.getUserInfo(context.user);
+      const dbUser = await this.findUserBySlackId(context.user);
+      
+      // Determine intent using Claude
+      const intent = await this.detectIntent(query, dbUser);
+      
+      // Execute action based on intent
+      const result = await this.executeAction(intent, query, dbUser);
+      
+      // Format response for Slack
+      return this.formatResponse(result);
+      
+    } catch (error) {
+      return {
+        text: `❌ Error: ${error.message}`,
+        blocks: [{
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `*Error processing request*\n${error.message}`
+          }
+        }]
+      };
+    }
+  }
+  
+  async detectIntent(query, user) {
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 512,
+      system: `You are a field service assistant analyzing user requests.
+
+Detect intent and extract parameters. Return JSON.
+
+Intents:
+- get_revenue: Check revenue/sales
+- get_schedule: View schedule
+- create_estimate: Generate quote
+- find_customer: Search customer
+- schedule_job: Book appointment
+- check_status: System status
+- get_analytics: Reports/analytics
+- find_technician: Tech availability
+- create_job: Create service call
+- get_estimate: View estimate details
+- send_estimate: Send quote to customer
+
+User role: ${user?.role || 'unknown'}
+
+Return: { intent: "...", confidence: 0-1, params: {...} }`,
+      messages: [{
+        role: 'user',
+        content: query
+      }]
+    });
+    
+    const text = response.content[0].text;
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+    
+    return { intent: 'unknown', confidence: 0, params: {} };
+  }
+  
+  async executeAction(intent, query, user) {
+    const { intent: intentType, params } = intent;
+    
+    switch (intentType) {
+      case 'get_revenue':
+        return await this.getRevenue(params);
+      
+      case 'get_schedule':
+        return await this.getSchedule(params, user);
+      
+      case 'create_estimate':
+        return await this.createEstimate(params, query);
+      
+      case 'find_customer':
+        return await this.findCustomer(params);
+      
+      case 'schedule_job':
+        return await this.scheduleJob(params);
+      
+      case 'check_status':
+        return await this.checkStatus();
+      
+      case 'get_analytics':
+        return await this.getAnalytics(params);
+      
+      default:
+        return {
+          type: 'unknown',
+          message: "I'm not sure what you're asking. Try:\n• What's my revenue today?\n• Show my schedule\n• Generate a quote for [service]\n• Find customer [name]"
+        };
+    }
+  }
+  
+  async getRevenue(params) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const invoices = await prisma.st_invoices.findMany({
+      where: {
+        st_created_on: { gte: today }
+      }
+    });
+    
+    const total = invoices.reduce((sum, inv) => sum + Number(inv.total), 0);
+    
+    // Group by business unit
+    const byUnit = {};
+    for (const inv of invoices) {
+      const job = await prisma.st_jobs.findUnique({
+        where: { st_id: inv.job_id },
+        include: { business_unit: true }
+      });
+      
+      const unitName = job?.business_unit?.name || 'Unknown';
+      byUnit[unitName] = (byUnit[unitName] || 0) + Number(inv.total);
+    }
+    
+    return {
+      type: 'revenue',
+      total,
+      count: invoices.length,
+      byUnit,
+      date: today
+    };
+  }
+  
+  async getSchedule(params, user) {
+    // Get technician ID from user
+    const tech = await prisma.st_technicians.findFirst({
+      where: { email: user?.email }
+    });
+    
+    if (!tech) {
+      return {
+        type: 'error',
+        message: "Couldn't find your technician profile"
+      };
+    }
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const appointments = await prisma.st_appointments.findMany({
+      where: {
+        technician_id: tech.st_id,
+        start_time: {
+          gte: today,
+          lt: tomorrow
+        }
+      },
+      include: {
+        job: {
+          include: {
+            customer: true,
+            location: true
+          }
+        }
+      },
+      orderBy: { start_time: 'asc' }
+    });
+    
+    return {
+      type: 'schedule',
+      technician: tech.name,
+      date: today,
+      appointments: appointments.map(apt => ({
+        time: apt.start_time,
+        customer: apt.job.customer.name,
+        address: apt.job.location.address_line1,
+        service: apt.job.summary,
+        status: apt.status
+      }))
+    };
+  }
+  
+  async createEstimate(params, originalQuery) {
+    // Use AI Estimator
+    const { aiEstimator } = await import('../../services/ai-estimator.js');
+    
+    // Need customer ID - ask if not provided
+    if (!params.customerId) {
+      return {
+        type: 'need_input',
+        message: "Which customer is this estimate for?",
+        action: 'select_customer'
+      };
+    }
+    
+    const estimate = await aiEstimator.generateFromDescription({
+      customerId: params.customerId,
+      description: originalQuery,
+      includeOptions: true
+    });
+    
+    return {
+      type: 'estimate_created',
+      estimate
+    };
+  }
+  
+  async findCustomer(params) {
+    const { query } = params;
+    
+    const customers = await prisma.st_customers.findMany({
+      where: {
+        OR: [
+          { name: { contains: query, mode: 'insensitive' } },
+          { phone: { contains: query } },
+          { email: { contains: query, mode: 'insensitive' } }
+        ]
+      },
+      take: 10
+    });
+    
+    return {
+      type: 'customer_search',
+      query,
+      results: customers
+    };
+  }
+  
+  async checkStatus() {
+    // Get system health
+    const [dbCheck, syncCheck, workflowCheck] = await Promise.all([
+      prisma.$queryRaw`SELECT 1`,
+      prisma.st_sync_log.findFirst({ orderBy: { started_at: 'desc' } }),
+      prisma.workflow_instances.count({ where: { status: 'active' } })
+    ]);
+    
+    return {
+      type: 'system_status',
+      database: 'healthy',
+      lastSync: syncCheck?.started_at,
+      activeWorkflows: workflowCheck
+    };
+  }
+  
+  formatResponse(result) {
+    switch (result.type) {
+      case 'revenue':
+        return this.formatRevenueResponse(result);
+      
+      case 'schedule':
+        return this.formatScheduleResponse(result);
+      
+      case 'estimate_created':
+        return this.formatEstimateResponse(result);
+      
+      case 'customer_search':
+        return this.formatCustomerSearchResponse(result);
+      
+      case 'system_status':
+        return this.formatStatusResponse(result);
+      
+      default:
+        return { text: result.message || 'Done!' };
+    }
+  }
+  
+  formatRevenueResponse(data) {
+    const { total, count, byUnit } = data;
+    
+    let unitBreakdown = '';
+    for (const [unit, amount] of Object.entries(byUnit)) {
+      unitBreakdown += `• ${unit}: $${amount.toFixed(2)}\n`;
+    }
+    
+    return {
+      blocks: [
+        {
+          type: 'header',
+          text: {
+            type: 'plain_text',
+            text: '💰 Today\'s Revenue'
+          }
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `*Total: $${total.toFixed(2)}* from ${count} invoices\n\n${unitBreakdown}`
+          }
+        },
+        {
+          type: 'actions',
+          elements: [
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: 'View Details'
+              },
+              action_id: 'view_revenue_details',
+              value: new Date().toISOString()
+            }
+          ]
+        }
+      ]
+    };
+  }
+  
+  formatScheduleResponse(data) {
+    const { technician, appointments } = data;
+    
+    let schedule = '';
+    const now = new Date();
+    
+    for (const apt of appointments) {
+      const time = new Date(apt.time);
+      const isPast = time < now;
+      const icon = isPast ? '✅' : time - now < 3600000 ? '⏰' : '•';
+      
+      schedule += `${icon} ${time.toLocaleTimeString('en-US', { 
+        hour: 'numeric', 
+        minute: '2-digit' 
+      })} - ${apt.customer} - ${apt.address}\n`;
+    }
+    
+    return {
+      blocks: [
+        {
+          type: 'header',
+          text: {
+            type: 'plain_text',
+            text: `📅 ${technician}'s Schedule`
+          }
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `*${appointments.length} jobs today*\n\n${schedule}`
+          }
+        }
+      ]
+    };
+  }
+  
+  formatEstimateResponse(data) {
+    const { estimate } = data;
+    
+    return {
+      blocks: [
+        {
+          type: 'header',
+          text: {
+            type: 'plain_text',
+            text: '📋 Estimate Created'
+          }
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `*Estimate #${estimate.estimateNumber}*\nTotal: $${estimate.total.toFixed(2)}\n\n${estimate.items.length} items included`
+          }
+        },
+        {
+          type: 'actions',
+          elements: [
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: 'View Estimate'
+              },
+              url: `https://your-app.com/estimates/${estimate.estimateId}`,
+              action_id: 'view_estimate'
+            },
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: 'Send to Customer'
+              },
+              style: 'primary',
+              action_id: 'send_estimate',
+              value: estimate.estimateId.toString()
+            }
+          ]
+        }
+      ]
+    };
+  }
+  
+  formatCustomerSearchResponse(data) {
+    const { query, results } = data;
+    
+    if (results.length === 0) {
+      return {
+        text: `No customers found matching "${query}"`
+      };
+    }
+    
+    let customerList = '';
+    for (const customer of results.slice(0, 5)) {
+      customerList += `• ${customer.name} - ${customer.phone}\n`;
+    }
+    
+    return {
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `*Found ${results.length} customers matching "${query}"*\n\n${customerList}`
+          }
+        }
+      ]
+    };
+  }
+  
+  formatStatusResponse(data) {
+    const { database, lastSync, activeWorkflows } = data;
+    
+    const syncStatus = lastSync 
+      ? `Last sync: ${new Date(lastSync).toLocaleString()}`
+      : 'Never synced';
+    
+    return {
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `*System Status*\n\n✅ Database: ${database}\n📊 ${syncStatus}\n⚡ Active workflows: ${activeWorkflows}`
+          }
+        }
+      ]
+    };
+  }
+  
+  async findUserBySlackId(slackUserId) {
+    // Map Slack user to database user
+    // This would be stored in a slack_users table
+    return { id: 1, role: 'manager', email: 'user@company.com' };
+  }
+}
+
+export const conversationalBot = new ConversationalBot();
+```
+
+---
+
+### File 3: Real-Time Notifications
+
+**File:** `src/integrations/slack/notification-service.js`
+
+```javascript
+import { slackClient } from './slack-client.js';
+
+export class SlackNotificationService {
+  
+  async notifyNewJob(job) {
+    const channel = process.env.SLACK_DISPATCH_CHANNEL;
+    
+    await slackClient.sendMessage(channel, {
+      blocks: [
+        {
+          type: 'header',
+          text: {
+            type: 'plain_text',
+            text: '🆕 New Job Created'
+          }
+        },
+        {
+          type: 'section',
+          fields: [
+            {
+              type: 'mrkdwn',
+              text: `*Job #*\n${job.job_number}`
+            },
+            {
+              type: 'mrkdwn',
+              text: `*Customer*\n${job.customer.name}`
+            },
+            {
+              type: 'mrkdwn',
+              text: `*Service*\n${job.summary}`
+            },
+            {
+              type: 'mrkdwn',
+              text: `*Priority*\n${job.priority || 'Standard'}`
+            }
+          ]
+        },
+        {
+          type: 'actions',
+          elements: [
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: 'Schedule Now'
+              },
+              style: 'primary',
+              action_id: 'schedule_job',
+              value: job.st_id.toString()
+            },
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: 'View Details'
+              },
+              action_id: 'view_job',
+              value: job.st_id.toString()
+            }
+          ]
+        }
+      ]
+    });
+  }
+  
+  async notifyEstimateApproved(estimate) {
+    const channel = process.env.SLACK_SALES_CHANNEL;
+    
+    await slackClient.sendMessage(channel, {
+      blocks: [
+        {
+          type: 'header',
+          text: {
+            type: 'plain_text',
+            text: '✅ Estimate Approved!'
+          }
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `*${estimate.customer.name}* approved estimate #${estimate.estimate_number}\n\n💰 Amount: $${estimate.total.toFixed(2)}`
+          }
+        },
+        {
+          type: 'actions',
+          elements: [
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: 'Create Job'
+              },
+              style: 'primary',
+              action_id: 'create_job_from_estimate',
+              value: estimate.st_id.toString()
+            }
+          ]
+        }
+      ]
+    });
+  }
+  
+  async notifyEmergencyCall(job) {
+    // Send to emergency channel AND tag on-call person
+    const channel = process.env.SLACK_EMERGENCY_CHANNEL;
+    const oncallUser = process.env.SLACK_ONCALL_USER;
+    
+    await slackClient.sendMessage(channel, {
+      text: `🚨 <@${oncallUser}> Emergency Call!`,
+      blocks: [
+        {
+          type: 'header',
+          text: {
+            type: 'plain_text',
+            text: '🚨 EMERGENCY CALL'
+          }
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `*Customer:* ${job.customer.name}\n*Location:* ${job.location.address_line1}\n*Issue:* ${job.summary}\n\n<@${oncallUser}> Please respond immediately`
+          }
+        },
+        {
+          type: 'actions',
+          elements: [
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: 'I\'ll Take It'
+              },
+              style: 'danger',
+              action_id: 'accept_emergency',
+              value: job.st_id.toString()
+            },
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: 'Call Customer'
+              },
+              url: `tel:${job.customer.phone}`,
+              action_id: 'call_customer'
+            }
+          ]
+        }
+      ]
+    });
+  }
+  
+  async notifyJobCompleted(job) {
+    const channel = process.env.SLACK_ACCOUNTING_CHANNEL;
+    
+    await slackClient.sendMessage(channel, {
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `✅ Job #${job.job_number} completed by ${job.technician.name}\nReady for invoicing`
+          }
+        },
+        {
+          type: 'actions',
+          elements: [
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: 'Create Invoice'
+              },
+              style: 'primary',
+              action_id: 'create_invoice',
+              value: job.st_id.toString()
+            }
+          ]
+        }
+      ]
+    });
+  }
+  
+  async notifyPaymentReceived(payment) {
+    const channel = process.env.SLACK_ACCOUNTING_CHANNEL;
+    
+    await slackClient.sendMessage(channel, {
+      text: `💰 Payment received: $${payment.amount.toFixed(2)} from ${payment.customer.name}`
+    });
+  }
+  
+  async sendDailyReport() {
+    const channel = process.env.SLACK_REPORTS_CHANNEL;
+    
+    // Generate daily summary
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const [jobs, revenue, appointments] = await Promise.all([
+      prisma.st_jobs.count({
+        where: { st_created_on: { gte: today } }
+      }),
+      prisma.st_invoices.aggregate({
+        where: { st_created_on: { gte: today } },
+        _sum: { total: true }
+      }),
+      prisma.st_appointments.count({
+        where: { 
+          start_time: { gte: today },
+          status: 'Completed'
+        }
+      })
+    ]);
+    
+    await slackClient.sendMessage(channel, {
+      blocks: [
+        {
+          type: 'header',
+          text: {
+            type: 'plain_text',
+            text: '📊 Daily Report'
+          }
+        },
+        {
+          type: 'section',
+          fields: [
+            {
+              type: 'mrkdwn',
+              text: `*Jobs Created*\n${jobs}`
+            },
+            {
+              type: 'mrkdwn',
+              text: `*Revenue*\n$${(revenue._sum.total || 0).toFixed(2)}`
+            },
+            {
+              type: 'mrkdwn',
+              text: `*Appointments*\n${appointments} completed`
+            }
+          ]
+        }
+      ]
+    });
+  }
+}
+
+export const slackNotifications = new SlackNotificationService();
+```
+
+---
+
+This is Part 1 of the Slack integration. Should I continue with:
+- **Part 2:** Slash commands implementation
+- **Part 3:** Interactive modals (forms)
+- **Part 4:** Complete deployment guide
+
+Total implementation: ~2,000 lines across 8 files.
+
+**Continue?**
