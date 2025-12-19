@@ -2,8 +2,8 @@
 
 A comprehensive automation platform for Perfect Catch Electric & Pools that integrates ServiceTitan, GoHighLevel, Slack, VAPI voice AI, and vendor pricing systems.
 
-**Version:** 2.2.0
-**Last Updated:** December 16, 2025
+**Version:** 2.3.0
+**Last Updated:** December 19, 2025
 
 ---
 
@@ -64,6 +64,66 @@ A comprehensive automation platform for Perfect Catch Electric & Pools that inte
 | Zones | 12 | Every 4 hours |
 | Job Types | 37 | Every 4 hours |
 | Pricebook Items | 6,000+ | Daily |
+| Job Technicians | 6,000+ | Every 5 min |
+
+---
+
+## GHL Sync Engine
+
+The GHL Sync Engine runs every 5 minutes and performs 4 steps:
+
+### Sync Steps
+
+| Step | Description | Action |
+|------|-------------|--------|
+| **Step 1** | New Customers | Creates GHL contacts & opportunities in "Contacted" stage |
+| **Step 2** | Appointments | Moves to "Appointment Scheduled" when job has appointments |
+| **Step 3** | Estimates | Moves to "Proposal Sent" when estimates are created |
+| **Step 4** | Technicians | Syncs primary technician to opportunity custom field |
+
+### Pipeline Configuration
+
+**Sales Pipeline** (`fWJfnMsPzwOXgKdWxdjC`):
+- New Lead → Contacted → Appointment Scheduled → Proposal Sent → Job Sold / Estimate Lost
+
+**Install Pipeline** (`bbsMqYClVMDN26Lr6HdV`):
+- Estimate Approved → Pre-Install Planning → Scheduled → In Progress → Completed
+
+### Technician Selection Logic
+
+The sync uses lead/helper position logic to select the PRIMARY technician for review requests:
+
+**Technician Positions:**
+| Position | Technicians |
+|----------|-------------|
+| **Lead** | Kurt, Tyler, Jayden, Kaine |
+| **Helper** | Dylan, Dan, Yanni |
+
+**Selection Rules:**
+1. **Logic 1**: If both lead and helper on job → select lead. If only helper → use helper.
+2. **Logic 2**: If multiple leads → prefer the one who sold the estimate (`sold_by`). Otherwise, first lead.
+
+### GHL Custom Fields
+
+| Field | ID | Type | Description |
+|-------|-----|------|-------------|
+| Techs | `sJ3jmGpHGFUssEVZ9Npi` | Multi-select | Primary technician for review |
+
+### Manual Scripts
+
+```bash
+# Sync technician assignments from ServiceTitan
+node scripts/sync-job-technicians.js
+
+# Sync primary technician to GHL opportunities
+node scripts/sync-techs-to-ghl.js
+
+# Check GHL pipeline state
+node scripts/check-ghl-state.js
+
+# Fix pipeline stages (move to Job Sold/Install)
+node scripts/fix-pipeline-stages.js
+```
 
 ---
 
@@ -285,6 +345,17 @@ All ServiceTitan API endpoints are proxied through `/api/st/*`
 | `/api/chat/session/:id` | GET | Get session context |
 | `/api/chat/session/:id` | DELETE | Clear session |
 
+### GHL Integration
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/ghl/pipelines` | GET | Get pipeline configuration |
+| `/ghl/install-pipeline/pending` | GET | Get opportunities ready for Install Pipeline |
+| `/ghl/install-pipeline/process` | POST | Process Install Pipeline moves |
+| `/ghl/job-to-estimate/:installJobId` | GET | Find original estimate for install job |
+| `/ghl/sync/status` | GET | Get GHL sync status and stats |
+| `/ghl/technicians/sync` | POST | Trigger technician sync |
+
 ---
 
 ## Environment Variables
@@ -377,6 +448,7 @@ User: postgres
 | `workflow_instances` | Active workflows |
 | `ghl_opportunities` | GHL opportunities |
 | `ghl_contacts` | GHL contacts |
+| `job_technicians` | Job-technician assignments with lead/helper position |
 | `messaging_log` | Message delivery log |
 
 ### Scheduling Module Tables

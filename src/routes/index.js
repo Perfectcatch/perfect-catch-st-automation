@@ -59,6 +59,9 @@ import slackRoutes from './slack.routes.js';
 // Scheduling routes (hybrid architecture)
 import schedulingRoutes from './scheduling.routes.js';
 
+// GHL integration routes (pipeline management, sync status)
+import ghlRoutes from './ghl.routes.js';
+
 const router = Router();
 
 // ═══════════════════════════════════════════════════════════════
@@ -132,5 +135,10 @@ router.use('/slack', slackRoutes);
 // SCHEDULING ROUTES (hybrid architecture: cached + real-time)
 // ═══════════════════════════════════════════════════════════════
 router.use('/scheduling', schedulingRoutes);
+
+// ═══════════════════════════════════════════════════════════════
+// GHL INTEGRATION ROUTES (pipeline management, sync, Install Pipeline)
+// ═══════════════════════════════════════════════════════════════
+router.use('/ghl', ghlRoutes);
 
 export default router;
