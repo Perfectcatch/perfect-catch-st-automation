@@ -1,5 +1,7 @@
 # Data Flow Diagrams
 
+*Last Updated: 2025-12-20*
+
 ## Complete System Flow
 
 ```mermaid
@@ -10,6 +12,13 @@ graph TD
         TW[Twilio SMS]
         SG[SendGrid Email]
         CR[CallRail]
+        CLAUDE[Claude AI]
+    end
+
+    subgraph Workers["Docker Workers"]
+        SYNC[st-sync-worker]
+        WORKFLOW[st-workflow-worker]
+        MONITOR[st-monitoring-agent]
     end
 
     subgraph SyncEngine["Sync Engine"]
@@ -18,15 +27,19 @@ graph TD
         SJ[sync-jobs.js]
         SE[sync-estimates.js]
         SI[sync-invoices.js]
+        SA[sync-appointments.js]
         SR[sync-reference-data.js]
-        SS[sync-scheduler.js]
     end
 
     subgraph Database["PostgreSQL Database"]
-        CUST[(st_customers)]
-        JOBS[(st_jobs)]
-        EST[(st_estimates)]
-        INV[(st_invoices)]
+        CUST[(st_customers<br/>1,696 rows)]
+        JOBS[(st_jobs<br/>3,260 rows)]
+        EST[(st_estimates<br/>1,247 rows)]
+        INV[(st_invoices<br/>3,597 rows)]
+        APPT[(st_appointments<br/>4,156 rows)]
+        TECH[(st_technicians<br/>14 rows)]
+        GHLC[(ghl_contacts<br/>108 rows)]
+        GHLO[(ghl_opportunities<br/>218 rows)]
         WFD[(workflow_definitions)]
         WFI[(workflow_instances)]
         MSG[(messaging_log)]
@@ -37,7 +50,6 @@ graph TD
         TE[trigger-engine.js]
         EE[execution-engine.js]
         AE[agent-executor.js]
-        CE[condition-evaluator.js]
         WM[workflow-manager.js]
     end
 
@@ -45,6 +57,7 @@ graph TD
         GC[sync-contacts-from-ghl.js]
         GO[sync-opportunities-from-ghl.js]
         GE[sync-estimate-to-ghl.js]
+        GM[move-to-install-pipeline.js]
     end
 
     subgraph MCPServer["MCP Server"]
@@ -52,15 +65,23 @@ graph TD
         API[call-st-api]
         SMS[send-sms]
         EMAIL[send-email]
+        SCHED[scheduling/*]
+    end
+
+    subgraph Monitoring["Self-Healing"]
+        HM[health-monitor.js]
+        SHA[self-healing-agent.js]
     end
 
     %% Sync Flow
-    ST -->|Every 5 min| SO
+    ST -->|Every 5 min| SYNC
+    SYNC --> SO
     SO --> SC --> CUST
     SO --> SJ --> JOBS
     SO --> SE --> EST
     SO --> SI --> INV
-    SO --> SR
+    SO --> SA --> APPT
+    SO --> SR --> TECH
 
     %% Event Detection Flow
     CUST -->|Poll 30s| ED
@@ -74,18 +95,26 @@ graph TD
     TE -->|Match| WFD
     TE -->|Create| WFI
     WFI --> EE
-    EE --> CE
     EE --> AE
 
     %% Action Execution
-    AE --> SMS --> TW
-    AE --> EMAIL --> SG
-    AE --> API --> ST
+    AE --> TW
+    AE --> SG
+    AE --> CLAUDE
 
     %% GHL Flow
     EST -->|Push| GE --> GHL
-    GHL -->|Pull| GC --> CUST
-    GHL -->|Pull| GO --> JOBS
+    GE --> GHLO
+    ED -->|estimate_approved| GM --> GHL
+    GHL -->|Pull| GC --> GHLC
+    GHL -->|Pull| GO --> GHLO
+
+    %% Monitoring Flow
+    MONITOR --> HM
+    HM --> SHA
+    SHA -->|Diagnose| CLAUDE
+    SHA -->|Restart| SYNC
+    SHA -->|Restart| WORKFLOW
 
     %% MCP Tools
     QD --> Database
@@ -101,49 +130,59 @@ graph TD
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                        SERVICETITAN SYNC FLOW                                │
+│                        ✅ FULLY OPERATIONAL                                  │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 1. TRIGGER
-   ├── Cron Schedule (0 */6 * * * for incremental)
-   ├── Manual: npm run sync:initial
+   ├── Cron Schedule (*/5 * * * * for incremental - every 5 minutes)
+   ├── Cron Schedule (0 2 * * * for full - daily at 2 AM)
+   ├── Manual: npm run sync:st-incremental
    └── API: POST /api/sync/full
 
 2. ORCHESTRATION (sync-orchestrator.js)
    │
-   ├── Phase 1: Reference Data
+   ├── Phase 1: Reference Data (daily at 2 AM)
    │   └── syncReferenceData()
-   │       ├── GET /settings/v2/tenant/{id}/business-units
-   │       ├── GET /settings/v2/tenant/{id}/technicians
-   │       ├── GET /jpm/v2/tenant/{id}/job-types
-   │       └── GET /marketing/v2/tenant/{id}/campaigns
+   │       ├── GET /settings/v2/tenant/{id}/business-units → st_business_units
+   │       ├── GET /settings/v2/tenant/{id}/technicians → st_technicians (14 records) ✅
+   │       ├── GET /jpm/v2/tenant/{id}/job-types → st_job_types
+   │       └── GET /marketing/v2/tenant/{id}/campaigns → st_campaigns
    │
    ├── Phase 2: Customers
    │   └── syncCustomers()
    │       └── GET /crm/v2/tenant/{id}/customers?pageSize=100
-   │           └── UPSERT → st_customers
+   │           └── UPSERT → st_customers (1,696 records) ✅
    │
    ├── Phase 3: Jobs
    │   └── syncJobs()
    │       └── GET /jpm/v2/tenant/{id}/jobs?pageSize=100
-   │           └── UPSERT → st_jobs
+   │           └── UPSERT → st_jobs (3,260 records) ✅
    │
    └── Phase 4: Related Entities (Parallel)
        ├── syncEstimates()
        │   └── GET /sales/v2/tenant/{id}/estimates
-       │       └── UPSERT → st_estimates
+       │       └── UPSERT → st_estimates (1,247 records) ✅
        │
-       ├── syncAppointments() ❌ 404 Error
+       ├── syncAppointments() ✅ FIXED
        │   └── GET /dispatch/v2/tenant/{id}/appointments
+       │       └── UPSERT → st_appointments (4,156 records) ✅
        │
        └── syncInvoices()
            └── GET /accounting/v2/tenant/{id}/invoices
-               └── UPSERT → st_invoices
+               └── UPSERT → st_invoices (3,597 records) ✅
 
 3. LOGGING
    └── INSERT → st_sync_log
        ├── module, sync_type, status
        ├── records_fetched, records_created, records_updated
        └── duration_ms, error_message
+
+STATS (Last 24 Hours):
+   ├── appointments: 259 syncs, avg 1214ms
+   ├── customers: 259 syncs, avg 1240ms
+   ├── estimates: 259 syncs, avg 932ms
+   ├── invoices: 259 syncs, avg 1172ms
+   └── jobs: 259 syncs, avg 1120ms
 ```
 
 ---
@@ -153,21 +192,24 @@ graph TD
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                        EVENT DETECTION FLOW                                  │
+│                        ✅ FULLY OPERATIONAL                                  │
 └─────────────────────────────────────────────────────────────────────────────┘
 
-1. POLLING (event-detector.js)
-   │
-   ├── Every 30 seconds, check each table:
+1. POLLING (event-detector.js - every 30 seconds)
    │
    ├── st_estimates
    │   └── SELECT * WHERE st_modified_on > lastCheck
    │       ├── New estimate → emit('estimate_created', data)
+   │       │   └── Auto-sync to GHL if GHL_AUTO_SYNC_ESTIMATES=true ✅
    │       ├── Status = 'Sold' → emit('estimate_approved', data)
+   │       │   └── Move GHL opp to "Job Sold" stage ✅
    │       └── Status = 'Dismissed' → emit('estimate_rejected', data)
    │
    ├── st_jobs
    │   └── SELECT * WHERE st_modified_on > lastCheck
    │       ├── New job → emit('job_created', data)
+   │       ├── BU contains "Install" → emit('install_job_created', data)
+   │       │   └── Move opp to Install Pipeline ✅
    │       └── Status = 'Completed' → emit('job_completed', data)
    │
    ├── st_invoices
@@ -181,14 +223,15 @@ graph TD
 
 2. EVENT HANDLING (workflow-manager.js)
    │
-   └── eventDetector.on('estimate_created', (data) => {
-           triggerEngine.handleEvent('estimate_created', data);
-       });
+   └── Events handled:
+       ├── estimate_created → syncEstimateToGHL()
+       ├── estimate_approved → moveOpportunityToJobSold()
+       ├── install_job_created → moveOpportunityToInstallPipeline()
+       └── Others → triggerEngine.handleEvent()
 
 3. TRIGGER MATCHING (trigger-engine.js)
    │
    ├── Load workflow_definitions WHERE enabled = true
-   │
    ├── For each definition:
    │   ├── Check trigger_event matches
    │   ├── Evaluate trigger_conditions against data
@@ -196,135 +239,116 @@ graph TD
    │
    └── If matched:
        └── INSERT → workflow_instances
-           ├── workflow_definition_id
-           ├── customer_id
-           ├── trigger_data (JSONB)
-           ├── current_step = 1
-           └── status = 'active'
 ```
 
 ---
 
-## Flow 3: Workflow Execution
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                        WORKFLOW EXECUTION FLOW                               │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-1. EXECUTION ENGINE (execution-engine.js)
-   │
-   ├── Every 10 seconds:
-   │   └── SELECT * FROM workflow_instances
-   │       WHERE status = 'active'
-   │         AND next_step_at <= NOW()
-   │
-   └── For each instance:
-
-2. STEP PROCESSING
-   │
-   ├── Get current step from workflow_definitions.steps[current_step]
-   │
-   ├── Evaluate step.condition (if exists)
-   │   └── condition-evaluator.js
-   │       ├── Parse expression: "estimate.status == 'Open'"
-   │       └── Evaluate against current entity state
-   │
-   ├── Check stop_conditions
-   │   ├── "estimate.status == 'Sold'" → Complete workflow
-   │   ├── "workflow.message_count >= 4" → Complete workflow
-   │   └── "customer.opted_out == true" → Complete workflow
-   │
-   └── Execute action via agent-executor.js
-
-3. AGENT EXECUTION (agent-executor.js)
-   │
-   ├── Parse action: "Send SMS to customer: '{message}'"
-   │
-   ├── Render template variables:
-   │   ├── {customer.name} → "John Smith"
-   │   ├── {estimate.total} → "$5,000"
-   │   └── {business.phone} → "(555) 123-4567"
-   │
-   ├── Call appropriate tool:
-   │   ├── SMS → Twilio API
-   │   └── Email → SendGrid API
-   │
-   └── Log result:
-       └── INSERT → workflow_step_executions
-           ├── workflow_instance_id
-           ├── step_number
-           ├── action_type
-           ├── result (success/failure)
-           └── response_data
-
-4. ADVANCE WORKFLOW
-   │
-   ├── UPDATE workflow_instances
-   │   ├── current_step = current_step + 1
-   │   ├── next_step_at = NOW() + step.delay
-   │   └── message_count = message_count + 1
-   │
-   └── If last step:
-       └── status = 'completed'
-```
-
----
-
-## Flow 4: Database → GoHighLevel Sync
+## Flow 3: Database → GoHighLevel Sync
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                        GHL SYNC FLOW                                         │
+│                        ✅ FULLY OPERATIONAL                                  │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 1. ESTIMATE → GHL OPPORTUNITY (sync-estimate-to-ghl.js)
    │
    ├── Trigger: Event detector detects new estimate
    │
-   ├── Query:
-   │   SELECT e.*, c.*, j.*, bu.ghl_pipeline_id
-   │   FROM st_estimates e
-   │   JOIN st_customers c ON e.customer_id = c.st_id
-   │   JOIN st_jobs j ON e.job_id = j.st_id
-   │   JOIN st_business_units bu ON j.business_unit_id = bu.st_id
-   │   WHERE e.st_id = ?
-   │
-   ├── Check: bu.ghl_pipeline_id exists
+   ├── Query customer and estimate data from database
    │
    ├── Find/Create GHL Contact:
    │   └── POST https://services.leadconnectorhq.com/contacts/
    │       ├── email: customer.email
    │       ├── phone: customer.phone
-   │       └── name: customer.name
+   │       ├── name: customer.name
+   │       └── customFields: { st_customer_id }
    │
-   └── Create GHL Opportunity:
+   └── Create/Update GHL Opportunity:
        └── POST https://services.leadconnectorhq.com/opportunities/
-           ├── pipelineId: bu.ghl_pipeline_id
-           ├── name: "Estimate #{estimate.number}"
+           ├── pipelineId: 'fWJfnMsPzwOXgKdWxdjC' (SALES PIPELINE)
+           ├── pipelineStageId: 'a75d3c82-...' (Proposal Sent)
+           ├── name: "Customer - Estimate Name - $Total"
            ├── monetaryValue: estimate.total
            ├── contactId: ghl_contact_id
-           └── customFields: { st_job_id, st_estimate_id }
+           └── customFields: { st_estimate_id, techs }
 
-2. GHL → DATABASE (sync-opportunities-from-ghl.js)
+2. ESTIMATE SOLD → JOB SOLD STAGE
    │
-   ├── GET https://services.leadconnectorhq.com/opportunities/
+   ├── Trigger: estimate_approved event
    │
-   └── For each opportunity:
-       └── UPSERT → ghl_opportunities ❌ TABLE NOT EXISTS
-           ├── ghl_id
-           ├── st_job_id (from customFields)
-           ├── pipeline_stage_id
-           ├── monetary_value
-           └── status
+   └── PUT https://services.leadconnectorhq.com/opportunities/{id}
+       └── pipelineStageId: '97703c8d-...' (Job Sold)
 
-3. GHL CONTACTS → DATABASE (sync-contacts-from-ghl.js)
+3. INSTALL JOB → INSTALL PIPELINE
    │
-   ├── GET https://services.leadconnectorhq.com/contacts/
+   ├── Trigger: install_job_created event
    │
-   └── For each contact:
-       └── Match to st_customers by phone/email
-           └── UPDATE st_customers SET ghl_contact_id = ?
+   └── Move opportunity from Sales Pipeline to Install Pipeline
+       └── Every 2 minutes: processInstallJobMoves()
+
+4. GHL → DATABASE (Background sync)
+   │
+   ├── syncContactsFromGHL() → ghl_contacts (108 records) ✅
+   └── syncOpportunitiesFromGHL() → ghl_opportunities (218 records) ✅
+
+CURRENT STATS:
+   ├── GHL Contacts: 108
+   ├── GHL Opportunities: 218
+   ├── By Stage:
+   │   ├── Appointment Scheduled: 104
+   │   ├── Scheduled/Ready for Install: 100
+   │   ├── Proposal Sent: 11
+   │   └── Other: 3
+   └── Last Sync: Running every 5 minutes
+```
+
+---
+
+## Flow 4: Self-Healing Monitoring
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        SELF-HEALING FLOW                                     │
+│                        ✅ FULLY OPERATIONAL                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+1. HEALTH MONITORING (st-monitoring-agent)
+   │
+   ├── Every 5 minutes: runHealthCheck()
+   │
+   ├── Checks:
+   │   ├── Database connectivity
+   │   ├── Sync status (last sync time)
+   │   ├── Worker heartbeats
+   │   └── Stalled workflows
+   │
+   └── If healthy: ✅ Log "All systems healthy"
+
+2. ISSUE DETECTION
+   │
+   ├── Sync stalled (>30 min) → fixSyncEngine()
+   │   └── Trigger: runIncrementalSync()
+   │
+   ├── Stalled workflows → fixWorkflowEngine()
+   │   └── UPDATE workflow_instances SET next_action_at = NOW()
+   │
+   ├── Workers not running → fixWorkers()
+   │   └── docker-compose up -d sync-worker workflow-worker
+   │
+   └── Unknown issues → diagnoseWithAI()
+       └── Ask Claude to analyze and recommend action
+
+3. AI DIAGNOSIS (when ANTHROPIC_API_KEY set)
+   │
+   ├── Send system context to Claude
+   ├── Receive JSON response with:
+   │   ├── diagnosis: "Brief explanation"
+   │   ├── action: "restart_workers | trigger_sync | reset_workflows | alert_human"
+   │   └── confidence: "high | medium | low"
+   │
+   └── If confidence = high:
+       └── Execute recommended action automatically
 ```
 
 ---
@@ -334,6 +358,7 @@ graph TD
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                        MCP TOOL EXECUTION FLOW                               │
+│                        ✅ AVAILABLE                                          │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 Claude Desktop / AI Agent
@@ -350,40 +375,62 @@ Claude Desktop / AI Agent
          │
          ├── Tool: call_st_api
          │   └── Proxy request to ServiceTitan API
-         │       ├── Handle authentication
+         │       ├── Handle authentication (OAuth2)
          │       └── Return API response
          │
          ├── Tool: send_sms
          │   └── POST to Twilio API
          │       ├── From: TWILIO_PHONE_NUMBER
-         │       ├── To: customer phone
-         │       └── Body: message
+         │       └── To: customer phone
          │
          ├── Tool: send_email
          │   └── POST to SendGrid API
-         │       ├── From: configured sender
-         │       ├── To: customer email
-         │       └── Subject/Body: from template
+         │       └── Send templated email
          │
-         ├── Tool: create_job
-         │   └── POST /jpm/v2/tenant/{id}/jobs
-         │       └── Create new ServiceTitan job
+         ├── Tool: scheduling/*
+         │   ├── get_technicians - List available techs
+         │   ├── get_availability - Check schedules
+         │   └── schedule_appointment - Book appointment
          │
-         └── Tool: schedule_appointment
-             └── POST /dispatch/v2/tenant/{id}/appointments
-                 └── Schedule technician visit
+         ├── Tool: estimates/*
+         │   ├── get_estimate_details
+         │   ├── add_items_to_estimate
+         │   ├── generate_estimate_from_description
+         │   └── search_pricebook
+         │
+         ├── Tool: customers/*
+         │   └── Customer lookup and history
+         │
+         └── Tool: ai/*
+             └── AI-powered analysis tools
 ```
 
 ---
 
 ## Data Transformation Summary
 
-| Source | Transformation | Destination |
-|--------|---------------|-------------|
-| ST /customers | Flatten, normalize phone | st_customers |
-| ST /jobs | Map status, extract tags | st_jobs |
-| ST /estimates | Parse items, calculate total | st_estimates |
-| ST /invoices | Parse amounts, track balance | st_invoices |
-| st_estimates | Build opportunity payload | GHL /opportunities |
-| st_customers | Build contact payload | GHL /contacts |
-| workflow_definitions.steps | Parse action, render template | Twilio/SendGrid |
+| Source | Transformation | Destination | Status |
+|--------|---------------|-------------|--------|
+| ST /customers | Flatten, normalize phone | st_customers | ✅ Working |
+| ST /jobs | Map status, extract tags | st_jobs | ✅ Working |
+| ST /estimates | Parse items, calculate total | st_estimates | ✅ Working |
+| ST /invoices | Parse amounts, track balance | st_invoices | ✅ Working |
+| ST /appointments | Map technicians | st_appointments | ✅ Working |
+| ST /technicians | Extract skills, availability | st_technicians | ✅ Working |
+| st_estimates | Build opportunity payload | GHL opportunities | ✅ Working |
+| st_customers | Build contact payload | GHL contacts | ✅ Working |
+| Events | Trigger matching | workflow_instances | ✅ Working |
+| workflow_instances | Action execution | Twilio/SendGrid | ✅ Ready |
+
+---
+
+## System Health Status
+
+| Component | Status | Last Check |
+|-----------|--------|------------|
+| ServiceTitan Sync | ✅ Healthy | Every 5 min |
+| Event Detection | ✅ Healthy | Every 30 sec |
+| GHL Sync | ✅ Healthy | Every 5 min |
+| Workflow Engine | ✅ Healthy | Every 10 sec |
+| Self-Healing | ✅ Active | Every 5 min |
+| MCP Server | ✅ Available | On-demand |
