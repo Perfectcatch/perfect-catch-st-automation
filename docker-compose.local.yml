@@ -1,0 +1,132 @@
+# ============================================
+# Local Development Stack
+# Complete self-contained environment
+# ============================================
+# Usage: docker compose -f docker-compose.local.yml up -d
+
+services:
+  # ============================================
+  # PostgreSQL Database
+  # ============================================
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: st-postgres-local
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: localdev123
+      POSTGRES_DB: perfectcatch_automation
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./src/db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # Redis (for caching & job queues)
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: st-redis-local
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # Main API Server
+  # ============================================
+  st-automation:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: st-automation-local
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    env_file:
+      - .env.local
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:localdev123@postgres:5432/perfectcatch_automation
+      - SERVICETITAN_DATABASE_URL=postgresql://postgres:localdev123@postgres:5432/perfectcatch_automation
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ============================================
+  # Sync Worker (Background Jobs)
+  # ============================================
+  sync-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: st-sync-worker-local
+    command: npm run worker:sync
+    restart: unless-stopped
+    env_file:
+      - .env.local
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:localdev123@postgres:5432/perfectcatch_automation
+      - SERVICETITAN_DATABASE_URL=postgresql://postgres:localdev123@postgres:5432/perfectcatch_automation
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+
+  # ============================================
+  # Workflow Worker
+  # ============================================
+  workflow-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: st-workflow-worker-local
+    command: npm run worker:workflows
+    restart: unless-stopped
+    env_file:
+      - .env.local
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:localdev123@postgres:5432/perfectcatch_automation
+      - SERVICETITAN_DATABASE_URL=postgresql://postgres:localdev123@postgres:5432/perfectcatch_automation
+      - REDIS_URL=redis://redis:6379
+      - GHL_SYNC_ENABLED=false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+
+volumes:
+  postgres_data:
+  redis_data:
