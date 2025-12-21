@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sync Monitor - Perfect Catch</title>
+  <style>
+    :root {
+      --bg-primary: #1a1a2e;
+      --bg-secondary: #16213e;
+      --bg-card: #0f3460;
+      --text-primary: #eaeaea;
+      --text-secondary: #a0a0a0;
+      --accent-blue: #4a9eff;
+      --accent-green: #4ade80;
+      --accent-red: #f87171;
+      --accent-yellow: #fbbf24;
+      --accent-purple: #a78bfa;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      font-size: 14px;
+    }
+
+    .container {
+      max-width: 100%;
+      padding: 16px;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--bg-card);
+    }
+
+    .header h1 {
+      font-size: 20px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status-indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      animation: pulse 2s infinite;
+    }
+
+    .status-indicator.disconnected {
+      background: var(--accent-red);
+      animation: none;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border-radius: 8px;
+      padding: 16px;
+      text-align: center;
+    }
+
+    .stat-card .label {
+      font-size: 11px;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .stat-card .value {
+      font-size: 28px;
+      font-weight: 700;
+    }
+
+    .stat-card .sub-stats {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 8px;
+      font-size: 11px;
+    }
+
+    .stat-card .success { color: var(--accent-green); }
+    .stat-card .failed { color: var(--accent-red); }
+    .stat-card .pending { color: var(--accent-yellow); }
+    .stat-card .active { color: var(--accent-blue); }
+
+    .section {
+      background: var(--bg-secondary);
+      border-radius: 8px;
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: var(--bg-card);
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .section-header h2 {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .section-header .badge {
+      background: var(--accent-blue);
+      color: white;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+
+    .events-list {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .event-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 10px 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      transition: background 0.2s;
+    }
+
+    .event-item:hover {
+      background: rgba(255,255,255,0.05);
+    }
+
+    .event-item:last-child {
+      border-bottom: none;
+    }
+
+    .event-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .event-icon.success { background: rgba(74, 222, 128, 0.2); color: var(--accent-green); }
+    .event-icon.error { background: rgba(248, 113, 113, 0.2); color: var(--accent-red); }
+    .event-icon.workflow { background: rgba(167, 139, 250, 0.2); color: var(--accent-purple); }
+    .event-icon.info { background: rgba(74, 158, 255, 0.2); color: var(--accent-blue); }
+
+    .event-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .event-title {
+      font-weight: 500;
+      margin-bottom: 2px;
+    }
+
+    .event-details {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .event-time {
+      font-size: 11px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+
+    .error-item {
+      background: rgba(248, 113, 113, 0.1);
+      border-left: 3px solid var(--accent-red);
+      padding: 12px 16px;
+      margin: 8px;
+      border-radius: 4px;
+    }
+
+    .error-item .error-source {
+      font-weight: 600;
+      color: var(--accent-red);
+      margin-bottom: 4px;
+    }
+
+    .error-item .error-message {
+      font-size: 13px;
+      word-break: break-word;
+    }
+
+    .error-item .error-time {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    .operations-list {
+      padding: 8px;
+    }
+
+    .operation-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      background: var(--bg-card);
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+
+    .operation-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .operation-spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--bg-secondary);
+      border-top-color: var(--accent-blue);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .operation-info {
+      flex: 1;
+    }
+
+    .operation-type {
+      font-weight: 500;
+      font-size: 13px;
+    }
+
+    .operation-details {
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-secondary);
+    }
+
+    .empty-state svg {
+      width: 48px;
+      height: 48px;
+      margin-bottom: 12px;
+      opacity: 0.5;
+    }
+
+    .btn {
+      background: var(--accent-blue);
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: opacity 0.2s;
+    }
+
+    .btn:hover {
+      opacity: 0.9;
+    }
+
+    .btn-small {
+      padding: 4px 10px;
+      font-size: 11px;
+    }
+
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--bg-secondary);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--bg-card);
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #1a4a7a;
+    }
+
+    /* Compact mode for sidebar */
+    .compact .header h1 { font-size: 16px; }
+    .compact .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .compact .stat-card { padding: 12px; }
+    .compact .stat-card .value { font-size: 22px; }
+    .compact .events-list { max-height: 200px; }
+  </style>
+</head>
+<body>
+  <div class="container" id="app">
+    <div class="header">
+      <h1>
+        <span class="status-indicator" id="statusIndicator"></span>
+        Sync Monitor
+      </h1>
+      <button class="btn btn-small" onclick="testEvent()">Test Event</button>
+    </div>
+
+    <!-- Statistics -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="label">Customers</div>
+        <div class="value" id="customerTotal">0</div>
+        <div class="sub-stats">
+          <span class="success"><span id="customerSynced">0</span> synced</span>
+          <span class="failed"><span id="customerFailed">0</span> failed</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Opportunities</div>
+        <div class="value" id="opportunityTotal">0</div>
+        <div class="sub-stats">
+          <span class="success"><span id="opportunitySynced">0</span> synced</span>
+          <span class="failed"><span id="opportunityFailed">0</span> failed</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Workflows</div>
+        <div class="value" id="workflowTotal">0</div>
+        <div class="sub-stats">
+          <span class="active"><span id="workflowActive">0</span> active</span>
+          <span class="success"><span id="workflowCompleted">0</span> done</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Errors</div>
+        <div class="value failed" id="errorTotal">0</div>
+        <div class="sub-stats">
+          <span class="pending">Last hour</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Operations -->
+    <div class="section" id="operationsSection" style="display: none;">
+      <div class="section-header">
+        <h2>Active Operations</h2>
+        <span class="badge" id="operationsCount">0</span>
+      </div>
+      <div class="operations-list" id="operationsList"></div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Recent Activity</h2>
+        <span class="badge" id="eventsCount">0</span>
+      </div>
+      <div class="events-list" id="eventsList">
+        <div class="empty-state">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <p>Waiting for sync events...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Errors -->
+    <div class="section" id="errorsSection" style="display: none;">
+      <div class="section-header">
+        <h2>Recent Errors</h2>
+        <span class="badge" id="errorsCount">0</span>
+      </div>
+      <div class="errors-list" id="errorsList"></div>
+    </div>
+  </div>
+
+  <script>
+    // Configuration
+    const API_BASE = window.location.origin;
+    let eventSource = null;
+    let events = [];
+    let errors = [];
+    let operations = [];
+
+    // Check if compact mode (embedded in sidebar)
+    if (window.innerWidth < 400 || window.location.search.includes('compact')) {
+      document.querySelector('.container').classList.add('compact');
+    }
+
+    // Initialize
+    function init() {
+      connectSSE();
+      fetchInitialState();
+    }
+
+    // Connect to Server-Sent Events
+    function connectSSE() {
+      if (eventSource) {
+        eventSource.close();
+      }
+
+      eventSource = new EventSource(`${API_BASE}/api/monitor/stream`);
+
+      eventSource.onopen = () => {
+        document.getElementById('statusIndicator').classList.remove('disconnected');
+      };
+
+      eventSource.onerror = () => {
+        document.getElementById('statusIndicator').classList.add('disconnected');
+        setTimeout(connectSSE, 5000);
+      };
+
+      eventSource.addEventListener('init', (e) => {
+        const data = JSON.parse(e.data);
+        updateStats(data.stats);
+        events = data.recentEvents || [];
+        errors = data.recentErrors || [];
+        operations = data.activeOperations || [];
+        renderEvents();
+        renderErrors();
+        renderOperations();
+      });
+
+      eventSource.addEventListener('sync', (e) => {
+        const event = JSON.parse(e.data);
+        addEvent(event);
+      });
+
+      eventSource.addEventListener('stats', (e) => {
+        const stats = JSON.parse(e.data);
+        updateStats(stats);
+      });
+
+      eventSource.addEventListener('error', (e) => {
+        const error = JSON.parse(e.data);
+        addError(error);
+      });
+    }
+
+    // Fetch initial state
+    async function fetchInitialState() {
+      try {
+        const response = await fetch(`${API_BASE}/api/monitor/state`);
+        const data = await response.json();
+        if (data.success) {
+          updateStats(data.stats);
+          events = data.recentEvents || [];
+          errors = data.recentErrors || [];
+          operations = data.activeOperations || [];
+          renderEvents();
+          renderErrors();
+          renderOperations();
+        }
+      } catch (err) {
+        console.error('Failed to fetch initial state:', err);
+      }
+    }
+
+    // Update statistics
+    function updateStats(stats) {
+      // Customers
+      const customerTotal = stats.customers.synced + stats.customers.failed;
+      document.getElementById('customerTotal').textContent = customerTotal;
+      document.getElementById('customerSynced').textContent = stats.customers.synced;
+      document.getElementById('customerFailed').textContent = stats.customers.failed;
+
+      // Opportunities
+      const oppTotal = stats.opportunities.synced + stats.opportunities.failed;
+      document.getElementById('opportunityTotal').textContent = oppTotal;
+      document.getElementById('opportunitySynced').textContent = stats.opportunities.synced;
+      document.getElementById('opportunityFailed').textContent = stats.opportunities.failed;
+
+      // Workflows
+      const wfTotal = stats.workflows.triggered;
+      document.getElementById('workflowTotal').textContent = wfTotal;
+      document.getElementById('workflowActive').textContent = stats.workflows.active;
+      document.getElementById('workflowCompleted').textContent = stats.workflows.completed;
+
+      // Errors
+      document.getElementById('errorTotal').textContent = errors.length;
+    }
+
+    // Add a new event
+    function addEvent(event) {
+      events.unshift(event);
+      if (events.length > 50) events = events.slice(0, 50);
+      renderEvents();
+    }
+
+    // Add a new error
+    function addError(error) {
+      errors.unshift(error);
+      if (errors.length > 20) errors = errors.slice(0, 20);
+      renderErrors();
+      document.getElementById('errorTotal').textContent = errors.length;
+    }
+
+    // Render events list
+    function renderEvents() {
+      const container = document.getElementById('eventsList');
+      document.getElementById('eventsCount').textContent = events.length;
+
+      if (events.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <p>Waiting for sync events...</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = events.map(event => {
+        const { icon, iconClass, title } = getEventDisplay(event);
+        const time = formatTime(event.timestamp);
+
+        return `
+          <div class="event-item">
+            <div class="event-icon ${iconClass}">${icon}</div>
+            <div class="event-content">
+              <div class="event-title">${title}</div>
+              <div class="event-details">${event.entityName || event.entityId || ''}</div>
+            </div>
+            <div class="event-time">${time}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Render errors list
+    function renderErrors() {
+      const container = document.getElementById('errorsList');
+      const section = document.getElementById('errorsSection');
+      document.getElementById('errorsCount').textContent = errors.length;
+
+      if (errors.length === 0) {
+        section.style.display = 'none';
+        return;
+      }
+
+      section.style.display = 'block';
+      container.innerHTML = errors.map(error => `
+        <div class="error-item">
+          <div class="error-source">${error.source}</div>
+          <div class="error-message">${error.message}</div>
+          <div class="error-time">${formatTime(error.timestamp)}</div>
+        </div>
+      `).join('');
+    }
+
+    // Render operations list
+    function renderOperations() {
+      const container = document.getElementById('operationsList');
+      const section = document.getElementById('operationsSection');
+      document.getElementById('operationsCount').textContent = operations.length;
+
+      if (operations.length === 0) {
+        section.style.display = 'none';
+        return;
+      }
+
+      section.style.display = 'block';
+      container.innerHTML = operations.map(op => `
+        <div class="operation-item">
+          <div class="operation-spinner"></div>
+          <div class="operation-info">
+            <div class="operation-type">${op.type}</div>
+            <div class="operation-details">Started ${formatTime(op.startedAt)}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // Get display info for event type
+    function getEventDisplay(event) {
+      const type = event.type;
+
+      if (type.includes('success') || type.includes('completed')) {
+        return { icon: '✓', iconClass: 'success', title: formatEventType(type) };
+      }
+      if (type.includes('failed') || type.includes('error')) {
+        return { icon: '✕', iconClass: 'error', title: formatEventType(type) };
+      }
+      if (type.includes('workflow')) {
+        return { icon: '⚡', iconClass: 'workflow', title: formatEventType(type) };
+      }
+      return { icon: 'ℹ', iconClass: 'info', title: formatEventType(type) };
+    }
+
+    // Format event type for display
+    function formatEventType(type) {
+      return type
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase());
+    }
+
+    // Format timestamp
+    function formatTime(timestamp) {
+      const date = new Date(timestamp);
+      const now = new Date();
+      const diff = (now - date) / 1000;
+
+      if (diff < 60) return 'Just now';
+      if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+      if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+      return date.toLocaleDateString();
+    }
+
+    // Test event
+    async function testEvent() {
+      try {
+        await fetch(`${API_BASE}/api/monitor/test-event`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            data: {
+              entityId: Math.floor(Math.random() * 1000000),
+              entityName: 'Test Customer ' + Math.floor(Math.random() * 100),
+            },
+          }),
+        });
+      } catch (err) {
+        console.error('Failed to send test event:', err);
+      }
+    }
+
+    // Start
+    init();
+  </script>
+</body>
+</html>

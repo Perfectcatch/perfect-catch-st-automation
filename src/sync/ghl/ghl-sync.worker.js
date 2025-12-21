@@ -627,7 +627,13 @@ export async function runGHLSync() {
     return { step1Stats, step2Stats, step3Stats, step4Stats, duration: Date.now() - startTime };
 
   } catch (error) {
-    logger.error('GHL Sync failed:', error.message);
+    logger.error({
+      err: error,
+      errorMessage: error.message,
+      errorCode: error.code,
+      errorDetail: error.detail,
+      errorStack: error.stack?.split('\n').slice(0, 5).join('\n')
+    }, 'GHL Sync failed');
     throw error;
   } finally {
     client.release();
@@ -653,12 +659,24 @@ export function startGHLSyncScheduler() {
     try {
       await runGHLSync();
     } catch (error) {
-      logger.error('Scheduled GHL sync failed:', error.message);
+      logger.error({
+        err: error,
+        errorMessage: error.message,
+        errorCode: error.code,
+        errorDetail: error.detail,
+        errorHint: error.hint
+      }, 'Scheduled GHL sync failed');
     }
   });
 
   // Run immediately on start
-  runGHLSync().catch(err => logger.error('Initial GHL sync failed:', err.message));
+  runGHLSync().catch(err => logger.error({
+    err: err,
+    errorMessage: err.message,
+    errorCode: err.code,
+    errorDetail: err.detail,
+    errorHint: err.hint
+  }, 'Initial GHL sync failed'));
 }
 
 export function stopGHLSyncScheduler() {

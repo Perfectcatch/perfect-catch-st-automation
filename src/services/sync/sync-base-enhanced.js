@@ -18,19 +18,14 @@ let pool = null;
 
 export function getPool() {
   if (!pool) {
-    // When running from host (not Docker), use localhost:6432
-    // The Docker internal hostname 'postgres:5432' won't work from host
-    let connectionString = config.database?.url || process.env.SERVICETITAN_DATABASE_URL || process.env.DATABASE_URL;
-    
-    // Convert Docker internal URL to host-accessible URL
-    if (connectionString && connectionString.includes('@postgres:5432')) {
-      connectionString = connectionString.replace('@postgres:5432', '@localhost:6432');
-    }
-    
+    // Use connection string as-is from environment
+    // Docker containers use postgres:5432, host scripts should set appropriate URL
+    const connectionString = config.database?.url || process.env.SERVICETITAN_DATABASE_URL || process.env.DATABASE_URL;
+
     if (!connectionString) {
       throw new Error('Database connection string not configured');
     }
-    
+
     logger.info('[sync-base] Connecting to database...');
     pool = new Pool({ connectionString, max: 10 });
   }

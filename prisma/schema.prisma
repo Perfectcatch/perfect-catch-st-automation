@@ -10,7 +10,7 @@ generator client {
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
-  extensions = [vector, pg_trgm, uuid_ossp(map: "uuid-ossp")]
+  extensions = [pg_trgm, uuid_ossp(map: "uuid-ossp")]
 }
 
 // ============================================
@@ -906,3 +906,4 @@ model GhlWebhookEvent {
   @@index([processed])
   @@index([receivedAt(sort: Desc)])
 }
+

@@ -62,6 +62,9 @@ import schedulingRoutes from './scheduling.routes.js';
 // GHL integration routes (pipeline management, sync status)
 import ghlRoutes from './ghl.routes.js';
 
+// Monitoring routes (real-time sync monitoring dashboard)
+import monitorRoutes from './monitor.routes.js';
+
 const router = Router();
 
 // ═══════════════════════════════════════════════════════════════
@@ -140,5 +143,10 @@ router.use('/scheduling', schedulingRoutes);
 // GHL INTEGRATION ROUTES (pipeline management, sync, Install Pipeline)
 // ═══════════════════════════════════════════════════════════════
 router.use('/ghl', ghlRoutes);
+
+// ═══════════════════════════════════════════════════════════════
+// MONITORING ROUTES (real-time sync monitoring with SSE)
+// ═══════════════════════════════════════════════════════════════
+router.use('/api/monitor', monitorRoutes);
 
 export default router;

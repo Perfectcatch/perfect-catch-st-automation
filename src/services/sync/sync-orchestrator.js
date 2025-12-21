@@ -5,7 +5,7 @@
  */
 
 import { syncReferenceData } from './sync-reference-data.js';
-import { syncCustomers } from './sync-customers.js';
+import { syncCustomers } from './sync-customers-enhanced.js';
 import { syncJobs } from './sync-jobs.js';
 import { syncEstimates } from './sync-estimates.js';
 import { syncAppointments } from './sync-appointments.js';

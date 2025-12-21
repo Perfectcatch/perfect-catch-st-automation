@@ -9,6 +9,12 @@ import { db } from '../services/database.js';
 import { stRequest } from '../services/stClient.js';
 import { stEndpoints } from '../lib/stEndpoints.js';
 import logger from '../lib/logger.js';
+import {
+  syncCustomerContacts,
+  fullSyncContacts,
+  incrementalSyncContacts,
+  getContactsStats
+} from '../services/sync/sync-customer-contacts.js';
 
 const router = Router();
 
@@ -760,6 +766,84 @@ router.post('/jobs/enrich-batch', async (req, res, next) => {
     });
   } catch (error) {
     logger.error({ error }, 'Error in batch enrichment');
+    next(error);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// CUSTOMER CONTACTS SYNC
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * POST /db/contacts/sync
+ * Trigger customer contacts sync
+ * Query params: full=true for full sync, otherwise incremental
+ */
+router.post('/contacts/sync', async (req, res, next) => {
+  try {
+    const full = req.query.full === 'true';
+    logger.info({ full }, 'Starting contacts sync');
+
+    const result = await syncCustomerContacts({ full });
+
+    res.json({
+      success: true,
+      ...result
+    });
+  } catch (error) {
+    logger.error({ error }, 'Contacts sync failed');
+    next(error);
+  }
+});
+
+/**
+ * POST /db/contacts/sync/full
+ * Trigger full contacts sync using export endpoint
+ */
+router.post('/contacts/sync/full', async (req, res, next) => {
+  try {
+    logger.info('Starting full contacts sync (export endpoint)');
+    const result = await fullSyncContacts();
+
+    res.json({
+      success: true,
+      ...result
+    });
+  } catch (error) {
+    logger.error({ error }, 'Full contacts sync failed');
+    next(error);
+  }
+});
+
+/**
+ * POST /db/contacts/sync/incremental
+ * Trigger incremental contacts sync
+ */
+router.post('/contacts/sync/incremental', async (req, res, next) => {
+  try {
+    logger.info('Starting incremental contacts sync');
+    const result = await incrementalSyncContacts();
+
+    res.json({
+      success: true,
+      ...result
+    });
+  } catch (error) {
+    logger.error({ error }, 'Incremental contacts sync failed');
+    next(error);
+  }
+});
+
+/**
+ * GET /db/contacts/stats
+ * Get contacts sync statistics
+ */
+router.get('/contacts/stats', async (req, res, next) => {
+  try {
+    const stats = await getContactsStats();
+    res.json(stats);
+  } catch (error) {
+    logger.error({ error }, 'Error fetching contacts stats');
     next(error);
   }
 });

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   st-automation:
     build:
@@ -13,7 +11,7 @@ services:
       - .env
     environment:
       - NODE_ENV=production
-      - SERVICETITAN_DATABASE_URL=postgresql://postgres:Catchadmin@2025@postgres:5432/perfectcatch_automation
+      - SERVICETITAN_DATABASE_URL=postgresql://postgres:Catchadmin%402025@postgres:5432/perfectcatch_automation
     networks:
       default:
       databasestack_default:
@@ -51,7 +49,7 @@ services:
       - .env
     environment:
       - NODE_ENV=production
-      - SERVICETITAN_DATABASE_URL=postgresql://postgres:Catchadmin@2025@postgres:5432/perfectcatch_automation
+      - SERVICETITAN_DATABASE_URL=postgresql://postgres:Catchadmin%402025@postgres:5432/perfectcatch_automation
     networks:
       default:
       databasestack_default:
@@ -88,7 +86,7 @@ services:
       - .env
     environment:
       - NODE_ENV=production
-      - SERVICETITAN_DATABASE_URL=postgresql://postgres:Catchadmin@2025@postgres:5432/perfectcatch_automation
+      - SERVICETITAN_DATABASE_URL=postgresql://postgres:Catchadmin%402025@postgres:5432/perfectcatch_automation
       # GHL Sync Controls - ENABLED
       - GHL_SYNC_ENABLED=true
       - GHL_AUTO_SYNC_ESTIMATES=true
@@ -130,7 +128,7 @@ services:
       - .env
     environment:
       - NODE_ENV=production
-      - SERVICETITAN_DATABASE_URL=postgresql://postgres:Catchadmin@2025@postgres:5432/perfectcatch_automation
+      - SERVICETITAN_DATABASE_URL=postgresql://postgres:Catchadmin%402025@postgres:5432/perfectcatch_automation
     networks:
       default:
       databasestack_default:
@@ -159,4 +157,6 @@ networks:
   databasestack_default:
     external: true
   n8n:
+    external: true
+  traefik-net:
     external: true

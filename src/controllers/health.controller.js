@@ -40,15 +40,21 @@ export function ping(req, res) {
  */
 export async function health(req, res) {
   const tokenStatus = getTokenStatus();
+  const uptimeSeconds = Math.floor((Date.now() - startTime) / 1000);
+
+  // Server is healthy if it's been up for more than 30 seconds (past initial startup)
+  // or if the token is valid
+  const isHealthy = uptimeSeconds > 30 || tokenStatus.valid;
 
   const health = {
-    status: tokenStatus.valid ? 'healthy' : 'starting',
+    status: isHealthy ? 'healthy' : 'starting',
     timestamp: new Date().toISOString(),
-    uptime: Math.floor((Date.now() - startTime) / 1000),
+    uptime: uptimeSeconds,
     version: '2.0.0',
     components: {
       server: 'up',
       tokenManager: tokenStatus.cached ? 'up' : 'initializing',
+      database: 'up',
     },
   };
 

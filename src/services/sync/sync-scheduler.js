@@ -6,12 +6,15 @@
 import cron from 'node-cron';
 import fs from 'fs';
 import { runIncrementalSync, runFullSync } from './sync-orchestrator.js';
+import { syncCustomerContacts, fullSyncContacts } from './sync-customer-contacts.js';
 import { createLogger } from '../../lib/logger.js';
 
 const logger = createLogger('sync-scheduler');
 
 let incrementalJob = null;
 let fullSyncJob = null;
+let contactsIncrementalJob = null;
+let contactsFullJob = null;
 let heartbeatInterval = null;
 let isRunning = false;
 
@@ -68,6 +71,30 @@ export function startSyncScheduler() {
   });
   logger.info(`Full sync scheduled: ${fullSyncCron}`);
 
+  // Contacts incremental sync every 4 hours
+  const contactsIncrementalCron = process.env.CONTACTS_INCREMENTAL_CRON || '0 */4 * * *';
+  contactsIncrementalJob = cron.schedule(contactsIncrementalCron, async () => {
+    try {
+      logger.info('Running scheduled contacts incremental sync...');
+      await syncCustomerContacts({ full: false });
+    } catch (error) {
+      logger.error('Scheduled contacts sync failed', { error: error.message });
+    }
+  });
+  logger.info(`Contacts incremental sync scheduled: ${contactsIncrementalCron}`);
+
+  // Contacts full sync daily at 3 AM (after main full sync)
+  const contactsFullCron = process.env.CONTACTS_FULL_CRON || '0 3 * * *';
+  contactsFullJob = cron.schedule(contactsFullCron, async () => {
+    try {
+      logger.info('Running scheduled contacts full sync...');
+      await fullSyncContacts();
+    } catch (error) {
+      logger.error('Scheduled contacts full sync failed', { error: error.message });
+    }
+  });
+  logger.info(`Contacts full sync scheduled: ${contactsFullCron}`);
+
   logger.info('Sync scheduler started successfully');
 }
 
@@ -86,6 +113,14 @@ export function stopSyncScheduler() {
   if (fullSyncJob) {
     fullSyncJob.stop();
     fullSyncJob = null;
+  }
+  if (contactsIncrementalJob) {
+    contactsIncrementalJob.stop();
+    contactsIncrementalJob = null;
+  }
+  if (contactsFullJob) {
+    contactsFullJob.stop();
+    contactsFullJob = null;
   }
   isRunning = false;
   logger.info('Sync scheduler stopped');

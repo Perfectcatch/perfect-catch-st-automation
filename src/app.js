@@ -5,6 +5,11 @@
 
 import express from 'express';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 import config from './config/index.js';
 import routes from './routes/index.js';
 import { requestLogger, errorHandler, apiKeyAuth, notFound } from './middleware/index.js';
@@ -163,6 +168,16 @@ app.use((req, res, next) => {
 });
 
 // ---------------------------------------------------------------
+// STATIC FILES (monitoring dashboard)
+// ---------------------------------------------------------------
+app.use('/dashboard', express.static(path.join(__dirname, '..', 'public')));
+
+// Serve monitor dashboard at /monitor
+app.get('/monitor', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'monitor.html'));
+});
+
+// ---------------------------------------------------------------
 // ROUTES
 // ---------------------------------------------------------------
 
@@ -208,6 +223,16 @@ app.use('/api/sync/scheduling', async (req, res, next) => {
     schedulingSyncRouter(req, res, next);
   } catch (e) {
     return res.status(503).json({ success: false, error: 'Scheduling sync module not available' });
+  }
+});
+
+// Mount Salesforce routes (conditionally - requires Redis)
+app.use('/api/salesforce', async (req, res, next) => {
+  try {
+    const salesforceRoutes = (await import('./routes/salesforce.routes.js')).default;
+    salesforceRoutes(req, res, next);
+  } catch (e) {
+    return res.status(503).json({ success: false, error: 'Salesforce module not available: ' + e.message });
   }
 });
 

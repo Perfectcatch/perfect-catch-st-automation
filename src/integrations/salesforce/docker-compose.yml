@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+  # ===========================================
+  # Salesforce Sync Service
+  # ===========================================
+  salesforce-sync:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      # Salesforce credentials (use secrets in production)
+      - SALESFORCE_CLIENT_ID=${SALESFORCE_CLIENT_ID}
+      - SALESFORCE_CLIENT_SECRET=${SALESFORCE_CLIENT_SECRET}
+      - SALESFORCE_REDIRECT_URI=${SALESFORCE_REDIRECT_URI}
+      - SALESFORCE_LOGIN_URL=${SALESFORCE_LOGIN_URL:-https://login.salesforce.com}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - PERFECTCATCH_WEBHOOK_SECRET=${PERFECTCATCH_WEBHOOK_SECRET}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - perfectcatch-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ===========================================
+  # Background Sync Worker
+  # (Optional: can run in same container)
+  # ===========================================
+  sync-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "dist/services/sync-worker.js"]
+    environment:
+      - NODE_ENV=production
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SALESFORCE_CLIENT_ID=${SALESFORCE_CLIENT_ID}
+      - SALESFORCE_CLIENT_SECRET=${SALESFORCE_CLIENT_SECRET}
+      - SALESFORCE_REDIRECT_URI=${SALESFORCE_REDIRECT_URI}
+      - SALESFORCE_LOGIN_URL=${SALESFORCE_LOGIN_URL:-https://login.salesforce.com}
+      - RUN_WORKER=true
+    depends_on:
+      redis:
+        condition: service_healthy
+      salesforce-sync:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - perfectcatch-network
+
+  # ===========================================
+  # Redis - Queue and State Storage
+  # ===========================================
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    networks:
+      - perfectcatch-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ===========================================
+  # Redis Commander (Development Only)
+  # Web UI for Redis at http://localhost:8081
+  # ===========================================
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    profiles:
+      - dev
+    networks:
+      - perfectcatch-network
+
+networks:
+  perfectcatch-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+    driver: local
