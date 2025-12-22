@@ -133,12 +133,26 @@ export class ServiceApplier {
    * @returns {Object}
    */
   mapStToLocal(stService) {
+    // Extract default image URL from assets
+    const defaultAsset = stService.assets?.find(a => a.isDefault) || stService.assets?.[0];
+    const defaultImageUrl = defaultAsset?.url 
+      ? `https://api.servicetitan.io/${defaultAsset.url}`
+      : stService.defaultAssetUrl 
+        ? `https://api.servicetitan.io/${stService.defaultAssetUrl}`
+        : null;
+
+    // Process assets to include full URLs
+    const processedAssets = (stService.assets || []).map(asset => ({
+      ...asset,
+      fullUrl: asset.url ? `https://api.servicetitan.io/${asset.url}` : null,
+    }));
+
     return {
       stId: BigInt(stService.id),
       tenantId: BigInt(this.tenantId),
       categoryId: stService.categoryId ? BigInt(stService.categoryId) : null,
       code: stService.code || '',
-      name: stService.name || '',
+      name: stService.name || stService.displayName || '',
       description: stService.description || null,
       displayName: stService.displayName || null,
       price: stService.price != null ? stService.price : null,
@@ -155,8 +169,13 @@ export class ServiceApplier {
       active: stService.active ?? true,
       taxable: stService.taxable ?? true,
       account: stService.account || null,
-      images: stService.images || [],
-      assets: stService.assets || [],
+      // New fields (snake_case for Prisma)
+      primary_vendor: stService.primaryVendor || {},
+      other_vendors: stService.otherVendors || [],
+      category_ids: stService.categories || [],
+      default_image_url: defaultImageUrl,
+      images: processedAssets.filter(a => a.type === 'Image'),
+      assets: processedAssets,
       customFields: stService.customFields || {},
       tags: stService.tags || [],
       externalData: stService.externalData || {},

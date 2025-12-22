@@ -373,7 +373,7 @@ export async function getCachedTechnicians(filters = {}) {
   let query = `
     SELECT t.*,
       COALESCE(json_agg(s.*) FILTER (WHERE s.id IS NOT NULL), '[]') as skills
-    FROM scheduling_technicians t
+    FROM raw_st_technicians t
     LEFT JOIN scheduling_technician_skills s ON s.technician_id = t.id
     WHERE t.deleted_at IS NULL
   `;
@@ -417,7 +417,7 @@ export async function getCachedZones(filters = {}) {
     return cached;
   }
 
-  let query = 'SELECT * FROM scheduling_zones WHERE 1=1';
+  let query = 'SELECT * FROM raw_st_zones WHERE 1=1';
   const params = [];
   let paramIndex = 1;
 
@@ -448,7 +448,7 @@ export async function getCachedTeams(filters = {}) {
     return cached;
   }
 
-  let query = 'SELECT * FROM scheduling_teams WHERE 1=1';
+  let query = 'SELECT * FROM raw_st_teams WHERE 1=1';
   const params = [];
   let paramIndex = 1;
 

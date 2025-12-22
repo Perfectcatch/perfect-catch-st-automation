@@ -29,7 +29,7 @@ export class ZoneComparator {
 
     // Get all local zones
     const localResult = await db.query(
-      'SELECT * FROM scheduling_zones'
+      'SELECT * FROM raw_st_zones'
     );
     const localZones = localResult.rows;
 

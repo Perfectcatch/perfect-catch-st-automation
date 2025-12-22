@@ -14,7 +14,7 @@ import {
   fullSyncContacts,
   incrementalSyncContacts,
   getContactsStats
-} from '../services/sync/sync-customer-contacts.js';
+} from '../workers/servicetitan-sync/sync-customer-contacts.js';
 
 const router = Router();
 

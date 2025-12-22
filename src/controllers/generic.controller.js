@@ -6,6 +6,56 @@
 import { stRequest } from '../services/stClient.js';
 
 /**
+ * Extract default asset URL from assets array
+ * @param {Array} assets - Array of asset objects
+ * @returns {string|null} - The URL of the default image asset
+ */
+export function getDefaultAssetUrl(assets) {
+  if (!assets || !Array.isArray(assets)) return null;
+
+  // Find the default image asset
+  const defaultAsset = assets.find(a => a.isDefault && a.type === 'Image');
+  if (defaultAsset?.url) return defaultAsset.url;
+
+  // Fallback to first image asset
+  const firstImage = assets.find(a => a.type === 'Image');
+  return firstImage?.url || null;
+}
+
+/**
+ * Add defaultAssetUrl to pricebook items
+ * Handles both 'assets' array (services, materials, equipment) and 'image' field (categories)
+ * @param {Object|Array} data - Single item or array of items
+ * @returns {Object|Array} - Items with defaultAssetUrl added
+ */
+export function addDefaultAssetUrl(data) {
+  const addUrl = (item) => {
+    // First try assets array (services, materials, equipment)
+    let url = getDefaultAssetUrl(item.assets);
+
+    // Fallback to direct image field (categories)
+    if (!url && item.image) {
+      url = item.image;
+    }
+
+    return {
+      ...item,
+      defaultAssetUrl: url,
+    };
+  };
+
+  if (Array.isArray(data)) {
+    return data.map(addUrl);
+  }
+
+  if (data && typeof data === 'object') {
+    return addUrl(data);
+  }
+
+  return data;
+}
+
+/**
  * Create a list handler for paginated endpoints
  * @param {Function} endpointFn - Function that returns the endpoint URL
  */

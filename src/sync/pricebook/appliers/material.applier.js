@@ -133,12 +133,26 @@ export class MaterialApplier {
    * @returns {Object}
    */
   mapStToLocal(stMaterial) {
+    // Extract default image URL from assets
+    const defaultAsset = stMaterial.assets?.find(a => a.isDefault) || stMaterial.assets?.[0];
+    const defaultImageUrl = defaultAsset?.url 
+      ? `https://api.servicetitan.io/${defaultAsset.url}`
+      : stMaterial.defaultAssetUrl 
+        ? `https://api.servicetitan.io/${stMaterial.defaultAssetUrl}`
+        : null;
+
+    // Process assets to include full URLs
+    const processedAssets = (stMaterial.assets || []).map(asset => ({
+      ...asset,
+      fullUrl: asset.url ? `https://api.servicetitan.io/${asset.url}` : null,
+    }));
+
     return {
       stId: BigInt(stMaterial.id),
       tenantId: BigInt(this.tenantId),
       categoryId: stMaterial.categoryId ? BigInt(stMaterial.categoryId) : null,
       code: stMaterial.code || '',
-      name: stMaterial.name || '',
+      name: stMaterial.name || stMaterial.displayName || '',
       description: stMaterial.description || null,
       displayName: stMaterial.displayName || null,
       manufacturer: stMaterial.manufacturer || null,
@@ -161,9 +175,23 @@ export class MaterialApplier {
       taxable: stMaterial.taxable ?? true,
       crossSell: stMaterial.crossSell ?? false,
       account: stMaterial.account || null,
-      primaryVendorId: stMaterial.primaryVendorId ? BigInt(stMaterial.primaryVendorId) : null,
-      images: stMaterial.images || [],
-      assets: stMaterial.assets || [],
+      primaryVendorId: stMaterial.primaryVendor?.vendorId ? BigInt(stMaterial.primaryVendor.vendorId) : null,
+      // New fields for vendors (snake_case for Prisma)
+      primary_vendor: stMaterial.primaryVendor || {},
+      other_vendors: stMaterial.otherVendors || [],
+      // Categories array
+      category_ids: stMaterial.categories || [],
+      // Images and assets with full URLs
+      images: processedAssets.filter(a => a.type === 'Image'),
+      assets: processedAssets,
+      default_image_url: defaultImageUrl,
+      // Additional fields
+      cost_of_sale_account: stMaterial.costOfSaleAccount || null,
+      asset_account: stMaterial.assetAccount || null,
+      is_inventory: stMaterial.isInventory ?? false,
+      chargeable_by_default: stMaterial.chargeableByDefault ?? true,
+      deduct_as_job_cost: stMaterial.deductAsJobCost ?? false,
+      pays_commission: stMaterial.paysCommission ?? false,
       customFields: stMaterial.customFields || {},
       tags: stMaterial.tags || [],
       externalData: stMaterial.externalData || {},

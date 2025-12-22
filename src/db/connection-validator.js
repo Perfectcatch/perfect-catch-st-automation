@@ -11,25 +11,17 @@ const logger = createLogger('db-validator');
  * Expected tables for each database type
  */
 export const DATABASE_SCHEMAS = {
-  // Pricebook database (st-pricebook-postgres:5451)
+  // Pricebook database - now uses raw_st_pricebook_* tables
   pricebook: {
     required: [
-      'pricebook_categories',
-      'pricebook_materials', 
-      'pricebook_services',
-      'pricebook_equipment',
+      'raw_st_pricebook_categories',
+      'raw_st_pricebook_materials',
+      'raw_st_pricebook_services',
+      'raw_st_pricebook_equipment',
     ],
     optional: [
-      'pricebook_sync_log',
-      'pricebook_sync_conflicts',
-      'pricebook_changes',
-      'pricebook_webhook_subscriptions',
+      'raw_sync_state',
       'chat_sessions',
-      'pb_categories',
-      'pb_materials',
-      'pb_services',
-      'pb_equipment',
-      'pb_vendors',
     ],
     forbidden: [
       'st_jobs',
@@ -74,14 +66,18 @@ export const DATABASE_SCHEMAS = {
       'callrail_conversion_log',
       'customer_communication_preferences',
       'sync_logs',
-      'sync_state',
+      'raw_sync_state',
+      'raw_st_customers',
+      'raw_st_locations',
+      'raw_st_jobs',
+      'raw_st_appointments',
+      'raw_st_invoices',
+      'raw_st_pricebook_materials',
+      'raw_st_pricebook_services',
+      'raw_st_pricebook_equipment',
+      'raw_st_pricebook_categories',
     ],
-    forbidden: [
-      'pricebook_categories',
-      'pricebook_materials',
-      'pricebook_services',
-      'pricebook_equipment',
-    ],
+    forbidden: [],
   },
 };
 

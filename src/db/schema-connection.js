@@ -120,38 +120,38 @@ export const servicetitan = {
 };
 
 export const pricebook = {
-  query: (sql, params) => queryWithSchema(SCHEMAS.PRICEBOOK, sql, params),
-  
+  query: (sql, params) => query(sql, params),
+
   async getMaterials(where = '', params = []) {
-    const sql = `SELECT * FROM pricebook_materials ${where ? 'WHERE ' + where : ''} ORDER BY name`;
+    const sql = `SELECT * FROM raw_st_pricebook_materials ${where ? 'WHERE ' + where : ''} ORDER BY display_name`;
     return this.query(sql, params);
   },
-  
+
   async getServices(where = '', params = []) {
-    const sql = `SELECT * FROM pricebook_services ${where ? 'WHERE ' + where : ''} ORDER BY name`;
+    const sql = `SELECT * FROM raw_st_pricebook_services ${where ? 'WHERE ' + where : ''} ORDER BY display_name`;
     return this.query(sql, params);
   },
-  
+
   async getEquipment(where = '', params = []) {
-    const sql = `SELECT * FROM pricebook_equipment ${where ? 'WHERE ' + where : ''} ORDER BY name`;
+    const sql = `SELECT * FROM raw_st_pricebook_equipment ${where ? 'WHERE ' + where : ''} ORDER BY display_name`;
     return this.query(sql, params);
   },
-  
+
   async getCategories(where = '', params = []) {
-    const sql = `SELECT * FROM pricebook_categories ${where ? 'WHERE ' + where : ''} ORDER BY name`;
+    const sql = `SELECT * FROM raw_st_pricebook_categories ${where ? 'WHERE ' + where : ''} ORDER BY name`;
     return this.query(sql, params);
   },
-  
+
   async searchItems(searchTerm, limit = 50) {
     const sql = `
-      SELECT 'material' as type, st_id, code, name, price, description 
-      FROM pricebook_materials WHERE name ILIKE $1 OR code ILIKE $1
+      SELECT 'material' as type, st_id, code, display_name as name, price, description
+      FROM raw_st_pricebook_materials WHERE display_name ILIKE $1 OR code ILIKE $1
       UNION ALL
-      SELECT 'service' as type, st_id, code, name, price, description 
-      FROM pricebook_services WHERE name ILIKE $1 OR code ILIKE $1
+      SELECT 'service' as type, st_id, code, display_name as name, price, description
+      FROM raw_st_pricebook_services WHERE display_name ILIKE $1 OR code ILIKE $1
       UNION ALL
-      SELECT 'equipment' as type, st_id, code, name, price, description 
-      FROM pricebook_equipment WHERE name ILIKE $1 OR code ILIKE $1
+      SELECT 'equipment' as type, st_id, code, display_name as name, price, description
+      FROM raw_st_pricebook_equipment WHERE display_name ILIKE $1 OR code ILIKE $1
       LIMIT $2
     `;
     return this.query(sql, [`%${searchTerm}%`, limit]);

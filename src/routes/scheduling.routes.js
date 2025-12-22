@@ -619,7 +619,7 @@ router.post('/technicians/:id/skills', async (req, res) => {
 
     // Get technician st_id
     const techResult = await db.query(
-      'SELECT st_id FROM scheduling_technicians WHERE id = $1',
+      'SELECT st_id FROM raw_st_technicians WHERE id = $1',
       [id]
     );
 

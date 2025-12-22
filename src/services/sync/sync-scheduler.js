@@ -6,7 +6,7 @@
 import cron from 'node-cron';
 import fs from 'fs';
 import { runIncrementalSync, runFullSync } from './sync-orchestrator.js';
-import { syncCustomerContacts, fullSyncContacts } from './sync-customer-contacts.js';
+import { syncCustomerContacts, fullSyncContacts } from '../../workers/servicetitan-sync/sync-customer-contacts.js';
 import { createLogger } from '../../lib/logger.js';
 
 const logger = createLogger('sync-scheduler');

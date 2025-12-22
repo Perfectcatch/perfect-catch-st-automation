@@ -25,7 +25,7 @@ export class TeamApplier {
     const data = this.mapStToLocal(stTeam);
 
     const result = await db.query(
-      `INSERT INTO scheduling_teams (
+      `INSERT INTO raw_st_teams (
         st_id, tenant_id, name, active,
         st_created_on, st_modified_on, last_synced_at, sync_status, metadata
       ) VALUES (
@@ -59,7 +59,7 @@ export class TeamApplier {
     const data = this.mapStToLocal(stTeam);
 
     const result = await db.query(
-      `UPDATE scheduling_teams SET
+      `UPDATE raw_st_teams SET
         name = $1,
         active = $2,
         st_modified_on = $3,
@@ -90,7 +90,7 @@ export class TeamApplier {
   async delete(localId, syncLogId) {
     // Set active to false instead of hard delete
     const result = await db.query(
-      `UPDATE scheduling_teams SET
+      `UPDATE raw_st_teams SET
         active = false,
         sync_status = 'synced',
         last_synced_at = NOW()

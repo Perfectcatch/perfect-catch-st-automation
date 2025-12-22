@@ -1,7 +1,3 @@
-// ============================================
-// Prisma Schema for Pricebook Sync Engine
-// ============================================
-
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["postgresqlExtensions"]
@@ -13,9 +9,1757 @@ datasource db {
   extensions = [pg_trgm, uuid_ossp(map: "uuid-ossp")]
 }
 
-// ============================================
-// ENUMS
-// ============================================
+model ChatSession {
+  id               String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  sessionId        String    @unique @map("session_id") @db.VarChar(255)
+  lastCategoryId   String?   @map("last_category_id") @db.Uuid
+  lastCategoryStId BigInt?   @map("last_category_st_id")
+  lastCategoryName String?   @map("last_category_name") @db.VarChar(255)
+  pendingAction    Json?     @map("pending_action")
+  history          Json?     @default("[]")
+  userId           String?   @map("user_id") @db.VarChar(255)
+  userName         String?   @map("user_name") @db.VarChar(255)
+  createdAt        DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  expiresAt        DateTime? @default(dbgenerated("(now() + '24:00:00'::interval)")) @map("expires_at") @db.Timestamptz(6)
+
+  @@index([expiresAt], map: "idx_chat_sessions_expires")
+  @@index([sessionId], map: "idx_chat_sessions_session_id")
+  @@index([userId], map: "idx_chat_sessions_user_id")
+  @@map("chat_sessions")
+}
+
+model GhlContact {
+  id             String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  ghlId          String    @unique @map("ghl_id") @db.VarChar(255)
+  ghlLocationId  String?   @map("ghl_location_id") @db.VarChar(255)
+  stCustomerId   BigInt?   @map("st_customer_id")
+  firstName      String?   @map("first_name") @db.VarChar(255)
+  lastName       String?   @map("last_name") @db.VarChar(255)
+  name           String?   @db.VarChar(500)
+  email          String?   @db.VarChar(255)
+  phone          String?   @db.VarChar(50)
+  addressLine1   String?   @map("address_line1") @db.VarChar(500)
+  city           String?   @db.VarChar(255)
+  state          String?   @db.VarChar(100)
+  zip            String?   @db.VarChar(20)
+  country        String?   @db.VarChar(100)
+  phoneNumbers   Json?     @default("[]") @map("phone_numbers")
+  emailAddresses Json?     @default("[]") @map("email_addresses")
+  tags           Json?     @default("[]")
+  source         String?   @db.VarChar(255)
+  type           String?   @db.VarChar(50)
+  customFields   Json?     @default("{}") @map("custom_fields")
+  ghlCreatedAt   DateTime? @map("ghl_created_at") @db.Timestamptz(6)
+  ghlUpdatedAt   DateTime? @map("ghl_updated_at") @db.Timestamptz(6)
+  fullData       Json      @map("full_data")
+  syncedToSt     Boolean?  @default(false) @map("synced_to_st")
+  stSyncError    String?   @map("st_sync_error")
+  localSyncedAt  DateTime? @default(now()) @map("local_synced_at") @db.Timestamptz(6)
+  syncStatus     String?   @default("synced") @map("sync_status") @db.VarChar(50)
+  syncAttempts   Int?      @default(0) @map("sync_attempts")
+  lastSyncError  String?   @map("last_sync_error")
+  stDataHash     String?   @map("st_data_hash") @db.VarChar(64)
+  ghlDataHash    String?   @map("ghl_data_hash") @db.VarChar(64)
+
+  @@index([email], map: "idx_ghl_contacts_email")
+  @@index([ghlId], map: "idx_ghl_contacts_ghl_id")
+  @@index([phone], map: "idx_ghl_contacts_phone")
+  @@index([stCustomerId], map: "idx_ghl_contacts_st_customer")
+  @@map("ghl_contacts")
+}
+
+model GhlOpportunity {
+  id                 String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  ghlId              String    @unique @map("ghl_id") @db.VarChar(255)
+  stJobId            BigInt?   @map("st_job_id")
+  stCustomerId       BigInt?   @map("st_customer_id")
+  ghlContactId       String?   @map("ghl_contact_id") @db.VarChar(255)
+  ghlLocationId      String?   @map("ghl_location_id") @db.VarChar(255)
+  ghlPipelineId      String    @map("ghl_pipeline_id") @db.VarChar(255)
+  pipelineName       String?   @map("pipeline_name") @db.VarChar(255)
+  ghlPipelineStageId String?   @map("ghl_pipeline_stage_id") @db.VarChar(255)
+  stageName          String?   @map("stage_name") @db.VarChar(255)
+  name               String    @db.VarChar(500)
+  monetaryValue      Decimal?  @default(0) @map("monetary_value") @db.Decimal(18, 4)
+  status             String?   @db.VarChar(50)
+  ghlCreatedAt       DateTime? @map("ghl_created_at") @db.Timestamptz(6)
+  ghlUpdatedAt       DateTime? @map("ghl_updated_at") @db.Timestamptz(6)
+  closedAt           DateTime? @map("closed_at") @db.Timestamptz(6)
+  lastStatusChangeAt DateTime? @map("last_status_change_at") @db.Timestamptz(6)
+  assignedTo         String?   @map("assigned_to") @db.VarChar(255)
+  source             String?   @db.VarChar(255)
+  leadValue          Decimal?  @map("lead_value") @db.Decimal(18, 4)
+  customFields       Json?     @default("{}") @map("custom_fields")
+  notesCount         Int?      @default(0) @map("notes_count")
+  tasksCount         Int?      @default(0) @map("tasks_count")
+  lastActivityAt     DateTime? @map("last_activity_at") @db.Timestamptz(6)
+  fullData           Json      @map("full_data")
+  syncedToSt         Boolean?  @default(false) @map("synced_to_st")
+  stSyncError        String?   @map("st_sync_error")
+  localSyncedAt      DateTime? @default(now()) @map("local_synced_at") @db.Timestamptz(6)
+  localCreatedAt     DateTime? @default(now()) @map("local_created_at") @db.Timestamptz(6)
+  localUpdatedAt     DateTime? @default(now()) @updatedAt @map("local_updated_at") @db.Timestamptz(6)
+  syncStatus         String?   @default("synced") @map("sync_status") @db.VarChar(50)
+  syncAttempts       Int?      @default(0) @map("sync_attempts")
+  lastSyncError      String?   @map("last_sync_error")
+  stDataHash         String?   @map("st_data_hash") @db.VarChar(64)
+  ghlDataHash        String?   @map("ghl_data_hash") @db.VarChar(64)
+  stEstimateId       BigInt?   @map("st_estimate_id")
+
+  @@index([ghlContactId], map: "idx_ghl_opportunities_contact")
+  @@index([ghlId], map: "idx_ghl_opportunities_ghl_id")
+  @@index([ghlPipelineId], map: "idx_ghl_opportunities_pipeline")
+  @@index([stCustomerId], map: "idx_ghl_opportunities_st_customer")
+  @@index([stEstimateId], map: "idx_ghl_opportunities_st_estimate")
+  @@index([stJobId], map: "idx_ghl_opportunities_st_job")
+  @@index([ghlPipelineStageId], map: "idx_ghl_opportunities_stage")
+  @@index([status], map: "idx_ghl_opportunities_status")
+  @@index([ghlUpdatedAt(sort: Desc)], map: "idx_ghl_opportunities_updated")
+  @@map("ghl_opportunities")
+}
+
+model GhlPipelineMapping {
+  id                  String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  stJobTypeId         BigInt?   @map("st_job_type_id")
+  stJobTypeName       String?   @map("st_job_type_name") @db.VarChar(255)
+  stBusinessUnitId    BigInt?   @map("st_business_unit_id")
+  stBusinessUnitName  String?   @map("st_business_unit_name") @db.VarChar(255)
+  ghlPipelineId       String    @map("ghl_pipeline_id") @db.VarChar(255)
+  ghlPipelineName     String?   @map("ghl_pipeline_name") @db.VarChar(255)
+  ghlDefaultStageId   String?   @map("ghl_default_stage_id") @db.VarChar(255)
+  ghlDefaultStageName String?   @map("ghl_default_stage_name") @db.VarChar(255)
+  ghlLocationId       String    @map("ghl_location_id") @db.VarChar(255)
+  isDefault           Boolean?  @default(false) @map("is_default")
+  priority            Int?      @default(0)
+  createdAt           DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([stJobTypeId, stBusinessUnitId, ghlLocationId], name: "uq_ghl_pipeline_mapping", map: "uq_ghl_pipeline_mapping")
+  @@index([stBusinessUnitId], map: "idx_ghl_pipeline_st_bu")
+  @@index([stJobTypeId], map: "idx_ghl_pipeline_st_job_type")
+  @@map("ghl_pipeline_mapping")
+}
+
+model GhlSyncLog {
+  id             String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  syncType       String    @map("sync_type") @db.VarChar(50)
+  direction      String    @db.VarChar(20)
+  status         String    @db.VarChar(50)
+  recordsFetched Int?      @default(0) @map("records_fetched")
+  recordsCreated Int?      @default(0) @map("records_created")
+  recordsUpdated Int?      @default(0) @map("records_updated")
+  recordsFailed  Int?      @default(0) @map("records_failed")
+  startedAt      DateTime? @default(now()) @map("started_at") @db.Timestamptz(6)
+  completedAt    DateTime? @map("completed_at") @db.Timestamptz(6)
+  durationMs     Int?      @map("duration_ms")
+  errorMessage   String?   @map("error_message")
+  errorDetails   Json?     @map("error_details")
+  triggeredBy    String?   @map("triggered_by") @db.VarChar(100)
+
+  @@index([startedAt(sort: Desc)], map: "idx_ghl_sync_log_started")
+  @@index([status], map: "idx_ghl_sync_log_status")
+  @@index([syncType], map: "idx_ghl_sync_log_type")
+  @@map("ghl_sync_log")
+}
+
+model GhlWebhookEvent {
+  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  eventType       String    @map("event_type") @db.VarChar(100)
+  ghlLocationId   String?   @map("ghl_location_id") @db.VarChar(255)
+  payload         Json
+  headers         Json?
+  processed       Boolean?  @default(false)
+  processedAt     DateTime? @map("processed_at") @db.Timestamptz(6)
+  processingError String?   @map("processing_error")
+  receivedAt      DateTime? @default(now()) @map("received_at") @db.Timestamptz(6)
+
+  @@index([receivedAt(sort: Desc)], map: "idx_ghl_webhook_events_received")
+  @@index([eventType], map: "idx_ghl_webhook_events_type")
+  @@map("ghl_webhook_events")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model callrail_calls {
+  id                      String                    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  callrail_id             String                    @unique @db.VarChar(255)
+  caller_phone            String?                   @db.VarChar(50)
+  tracking_number         String?                   @db.VarChar(50)
+  duration_seconds        Int?
+  call_start              DateTime?                 @db.Timestamptz(6)
+  call_end                DateTime?                 @db.Timestamptz(6)
+  recording_url           String?
+  call_status             String?                   @db.VarChar(50)
+  gclid                   String?
+  utm_source              String?                   @db.VarChar(100)
+  utm_medium              String?                   @db.VarChar(100)
+  utm_campaign            String?                   @db.VarChar(255)
+  utm_term                String?                   @db.VarChar(255)
+  utm_content             String?                   @db.VarChar(255)
+  landing_page_url        String?
+  referrer_url            String?
+  device_type             String?                   @db.VarChar(50)
+  caller_city             String?                   @db.VarChar(255)
+  caller_state            String?                   @db.VarChar(100)
+  caller_zip              String?                   @db.VarChar(20)
+  caller_country          String?                   @db.VarChar(100)
+  st_customer_id          BigInt?
+  matched_at              DateTime?                 @db.Timestamptz(6)
+  match_confidence        String?                   @db.VarChar(20)
+  match_method            String?                   @db.VarChar(50)
+  converted_to_job        Boolean?                  @default(false)
+  converted_to_estimate   Boolean?                  @default(false)
+  estimate_sold           Boolean?                  @default(false)
+  st_job_id               BigInt?
+  st_estimate_id          BigInt?
+  conversion_value        Decimal?                  @db.Decimal(18, 4)
+  conversion_date         DateTime?                 @db.Timestamptz(6)
+  gads_conversion_sent    Boolean?                  @default(false)
+  gads_conversion_sent_at DateTime?                 @db.Timestamptz(6)
+  gads_conversion_error   String?
+  gads_retry_count        Int?                      @default(0)
+  tags                    Json?                     @default("[]")
+  notes                   String?
+  full_data               Json
+  created_at              DateTime?                 @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime?                 @default(now()) @db.Timestamptz(6)
+  callrail_conversion_log callrail_conversion_log[]
+
+  @@index([st_customer_id], map: "idx_callrail_calls_customer")
+  @@index([st_estimate_id], map: "idx_callrail_calls_estimate")
+  @@index([callrail_id], map: "idx_callrail_calls_id")
+  @@index([st_job_id], map: "idx_callrail_calls_job")
+  @@index([caller_phone], map: "idx_callrail_calls_phone")
+  @@index([call_start(sort: Desc)], map: "idx_callrail_calls_start")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model callrail_conversion_log {
+  id                  String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  call_id             String         @db.Uuid
+  conversion_type     String         @db.VarChar(50)
+  conversion_value    Decimal?       @db.Decimal(18, 4)
+  gads_attempt_number Int?           @default(1)
+  gads_status         String?        @db.VarChar(50)
+  gads_response       Json?
+  gads_error          String?
+  gclid               String?
+  campaign_id         String?        @db.VarChar(255)
+  conversion_action   String?        @db.VarChar(100)
+  attempted_at        DateTime?      @default(now()) @db.Timestamptz(6)
+  succeeded_at        DateTime?      @db.Timestamptz(6)
+  triggered_by        String?        @db.VarChar(100)
+  callrail_calls      callrail_calls @relation(fields: [call_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([attempted_at(sort: Desc)], map: "idx_conversion_log_attempted")
+  @@index([call_id], map: "idx_conversion_log_call")
+  @@index([gads_status], map: "idx_conversion_log_status")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model customer_communication_preferences {
+  customer_id           BigInt    @id
+  sms_opted_out         Boolean?  @default(false)
+  email_opted_out       Boolean?  @default(false)
+  phone_opted_out       Boolean?  @default(false)
+  opted_out_at          DateTime? @db.Timestamptz(6)
+  opt_out_reason        String?   @db.VarChar(255)
+  preferred_channel     String?   @db.VarChar(50)
+  do_not_contact        Boolean?  @default(false)
+  max_messages_per_day  Int?      @default(3)
+  max_messages_per_week Int?      @default(10)
+  messages_today        Int?      @default(0)
+  messages_this_week    Int?      @default(0)
+  last_message_at       DateTime? @db.Timestamptz(6)
+  quiet_hours_start     DateTime? @db.Time(6)
+  quiet_hours_end       DateTime? @db.Time(6)
+  timezone              String?   @default("America/New_York") @db.VarChar(50)
+  created_at            DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([do_not_contact], map: "idx_customer_prefs_do_not_contact")
+  @@index([sms_opted_out], map: "idx_customer_prefs_opted_out")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model messaging_log {
+  id                   String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  channel              String    @db.VarChar(50)
+  direction            String    @db.VarChar(20)
+  to_phone             String?   @db.VarChar(50)
+  to_email             String?   @db.VarChar(255)
+  from_phone           String?   @db.VarChar(50)
+  from_email           String?   @db.VarChar(255)
+  subject              String?   @db.VarChar(500)
+  body                 String
+  customer_id          BigInt?
+  job_id               BigInt?
+  workflow_instance_id String?   @db.Uuid
+  provider             String?   @db.VarChar(50)
+  provider_message_id  String?   @db.VarChar(255)
+  provider_status      String?   @db.VarChar(50)
+  provider_error       String?
+  tracking_id          String?   @db.VarChar(255)
+  template_id          String?   @db.Uuid
+  status               String    @default("pending") @db.VarChar(50)
+  sent_at              DateTime? @db.Timestamptz(6)
+  delivered_at         DateTime? @db.Timestamptz(6)
+  opened_at            DateTime? @db.Timestamptz(6)
+  clicked_at           DateTime? @db.Timestamptz(6)
+  failed_at            DateTime? @db.Timestamptz(6)
+  cost                 Decimal?  @db.Decimal(10, 6)
+  metadata             Json?     @default("{}")
+  created_at           DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([channel], map: "idx_messaging_log_channel")
+  @@index([created_at(sort: Desc)], map: "idx_messaging_log_created")
+  @@index([customer_id], map: "idx_messaging_log_customer")
+  @@index([direction], map: "idx_messaging_log_direction")
+  @@index([job_id], map: "idx_messaging_log_job")
+  @@index([provider_message_id], map: "idx_messaging_log_provider_id")
+  @@index([status], map: "idx_messaging_log_status")
+  @@index([to_email], map: "idx_messaging_log_to_email")
+  @@index([to_phone], map: "idx_messaging_log_to_phone")
+  @@index([workflow_instance_id], map: "idx_messaging_log_workflow")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model messaging_templates {
+  id                 String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name               String    @unique @db.VarChar(255)
+  description        String?
+  channel            String    @db.VarChar(50)
+  subject_template   String?   @db.VarChar(500)
+  body_template      String
+  required_variables Json?     @default("[]")
+  active             Boolean?  @default(true)
+  category           String?   @db.VarChar(100)
+  usage_count        Int?      @default(0)
+  last_used_at       DateTime? @db.Timestamptz(6)
+  created_at         DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime? @default(now()) @db.Timestamptz(6)
+  created_by         String?   @db.VarChar(255)
+
+  @@index([active], map: "idx_messaging_templates_active")
+  @@index([category], map: "idx_messaging_templates_category")
+  @@index([channel], map: "idx_messaging_templates_channel")
+  @@index([name], map: "idx_messaging_templates_name")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model scheduling_arrival_windows {
+  id                String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id             BigInt      @unique
+  tenant_id         BigInt
+  name              String      @db.VarChar(255)
+  start_time        DateTime    @db.Time(6)
+  end_time          DateTime    @db.Time(6)
+  active            Boolean?    @default(true)
+  last_synced_at    DateTime?   @db.Timestamptz(6)
+  sync_status       SyncStatus? @default(synced)
+  local_created_at  DateTime?   @default(now()) @db.Timestamptz(6)
+  local_modified_at DateTime?   @default(now()) @db.Timestamptz(6)
+
+  @@index([st_id], map: "idx_sched_windows_st_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model scheduling_audit_log {
+  id                      String                 @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  action                  scheduling_action_type
+  job_st_id               BigInt?
+  appointment_st_id       BigInt?
+  customer_st_id          BigInt?
+  technician_st_id        BigInt?
+  user_id                 String?                @db.VarChar(255)
+  source                  ChangeSource           @default(api)
+  request_data            Json?
+  response_data           Json?
+  recommendations         Json?
+  selected_recommendation Int?
+  duration_ms             Int?
+  api_calls_made          Int?
+  created_at              DateTime?              @default(now()) @db.Timestamptz(6)
+
+  @@index([action], map: "idx_sched_audit_action")
+  @@index([created_at(sort: Desc)], map: "idx_sched_audit_created")
+  @@index([customer_st_id], map: "idx_sched_audit_customer")
+  @@index([job_st_id], map: "idx_sched_audit_job")
+  @@index([source], map: "idx_sched_audit_source")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model scheduling_availability_cache {
+  id               String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  technician_st_id BigInt
+  cache_date       DateTime  @db.Date
+  data             Json
+  cached_at        DateTime? @default(now()) @db.Timestamptz(6)
+  expires_at       DateTime  @db.Timestamptz(6)
+
+  @@unique([technician_st_id, cache_date])
+  @@index([cache_date], map: "idx_avail_cache_date")
+  @@index([expires_at], map: "idx_avail_cache_expires")
+  @@index([technician_st_id], map: "idx_avail_cache_tech")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model scheduling_business_hours {
+  id                String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id             BigInt      @unique
+  tenant_id         BigInt
+  name              String      @db.VarChar(255)
+  day_of_week       Int
+  start_time        DateTime    @db.Time(6)
+  end_time          DateTime    @db.Time(6)
+  active            Boolean?    @default(true)
+  last_synced_at    DateTime?   @db.Timestamptz(6)
+  sync_status       SyncStatus? @default(synced)
+  local_created_at  DateTime?   @default(now()) @db.Timestamptz(6)
+  local_modified_at DateTime?   @default(now()) @db.Timestamptz(6)
+
+  @@index([day_of_week], map: "idx_sched_hours_day")
+  @@index([st_id], map: "idx_sched_hours_st_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model scheduling_capacity_cache {
+  id         String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  cache_date DateTime  @db.Date
+  zone_st_id BigInt?
+  team_st_id BigInt?
+  data       Json
+  cached_at  DateTime? @default(now()) @db.Timestamptz(6)
+  expires_at DateTime  @db.Timestamptz(6)
+
+  @@unique([cache_date, zone_st_id, team_st_id])
+  @@index([cache_date], map: "idx_capacity_cache_date")
+  @@index([expires_at], map: "idx_capacity_cache_expires")
+  @@index([zone_st_id], map: "idx_capacity_cache_zone")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model scheduling_job_profiles {
+  id                   String                @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  job_type_id          String?               @db.Uuid
+  job_type_st_id       BigInt?
+  name                 String                @unique @db.VarChar(255)
+  description          String?
+  avg_duration_minutes Int                   @default(60)
+  min_duration_minutes Int?                  @default(30)
+  max_duration_minutes Int?                  @default(180)
+  required_skills      String[]              @default([])
+  preferred_skills     String[]              @default([])
+  requires_equipment   Boolean?              @default(false)
+  requires_permit      Boolean?              @default(false)
+  requires_two_techs   Boolean?              @default(false)
+  can_overlap          Boolean?              @default(false)
+  base_price           Decimal?              @db.Decimal(10, 2)
+  active               Boolean?              @default(true)
+  created_at           DateTime?             @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime?             @default(now()) @db.Timestamptz(6)
+  scheduling_job_types scheduling_job_types? @relation(fields: [job_type_id], references: [id], onUpdate: NoAction)
+
+  @@index([name(ops: raw("gin_trgm_ops"))], map: "idx_job_profiles_name_trgm", type: Gin)
+  @@index([required_skills], map: "idx_job_profiles_skills", type: Gin)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model scheduling_job_types {
+  id                      String                    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id                   BigInt                    @unique
+  tenant_id               BigInt
+  name                    String                    @db.VarChar(255)
+  category                String?                   @db.VarChar(100)
+  active                  Boolean?                  @default(true)
+  last_synced_at          DateTime?                 @db.Timestamptz(6)
+  sync_status             SyncStatus?               @default(synced)
+  local_created_at        DateTime?                 @default(now()) @db.Timestamptz(6)
+  local_modified_at       DateTime?                 @default(now()) @db.Timestamptz(6)
+  scheduling_job_profiles scheduling_job_profiles[]
+
+  @@index([name(ops: raw("gin_trgm_ops"))], map: "idx_sched_job_types_name_trgm", type: Gin)
+  @@index([st_id], map: "idx_sched_job_types_st_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model scheduling_rules {
+  id          String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  rule_name   String               @unique @db.VarChar(100)
+  description String?
+  rule_type   scheduling_rule_type @default(preference)
+  conditions  Json                 @default("{}")
+  actions     Json                 @default("{}")
+  priority    Int?                 @default(50)
+  active      Boolean?             @default(true)
+  created_at  DateTime?            @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime?            @default(now()) @db.Timestamptz(6)
+
+  @@index([priority(sort: Desc)], map: "idx_sched_rules_priority")
+  @@index([rule_type], map: "idx_sched_rules_type")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model scheduling_sync_log {
+  id                 String                   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  sync_type          String                   @db.VarChar(50)
+  direction          SyncDirection            @default(from_st)
+  entity_types       scheduling_entity_type[] @default([])
+  started_at         DateTime?                @default(now()) @db.Timestamptz(6)
+  completed_at       DateTime?                @db.Timestamptz(6)
+  duration_seconds   Int?
+  records_fetched    Int?                     @default(0)
+  records_created    Int?                     @default(0)
+  records_updated    Int?                     @default(0)
+  records_deleted    Int?                     @default(0)
+  records_skipped    Int?                     @default(0)
+  errors_encountered Int?                     @default(0)
+  status             SyncJobStatus?           @default(pending)
+  error_message      String?
+  error_stack        String?
+  triggered_by       ChangeSource             @default(system)
+  triggered_by_user  String?                  @db.VarChar(255)
+  results            Json?                    @default("{}")
+  created_at         DateTime?                @default(now()) @db.Timestamptz(6)
+
+  @@index([started_at(sort: Desc)], map: "idx_sched_sync_log_started")
+  @@index([status], map: "idx_sched_sync_log_status")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model scheduling_technician_skills {
+  id                    String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  technician_id         String       @db.Uuid
+  technician_st_id      BigInt
+  skill_name            String       @db.VarChar(100)
+  skill_level           skill_level? @default(basic)
+  certified             Boolean?     @default(false)
+  certification_name    String?      @db.VarChar(255)
+  certification_expires DateTime?    @db.Date
+  certification_number  String?      @db.VarChar(100)
+  notes                 String?
+  created_at            DateTime?    @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime?    @default(now()) @db.Timestamptz(6)
+
+  @@unique([technician_id, skill_name])
+  @@index([skill_name], map: "idx_tech_skills_skill_name")
+  @@index([technician_id], map: "idx_tech_skills_tech_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model scheduling_zone_travel_times {
+  id                   String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  from_zone_id         String?   @db.Uuid
+  from_zone_st_id      BigInt
+  to_zone_id           String?   @db.Uuid
+  to_zone_st_id        BigInt
+  avg_travel_minutes   Int
+  min_travel_minutes   Int?
+  max_travel_minutes   Int?
+  rush_hour_multiplier Decimal?  @default(1.5) @db.Decimal(3, 2)
+  created_at           DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@unique([from_zone_st_id, to_zone_st_id])
+  @@index([from_zone_st_id], map: "idx_travel_from_zone")
+  @@index([to_zone_st_id], map: "idx_travel_to_zone")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model st_appointments {
+  id                   String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id                BigInt    @unique(map: "st_appointments_st_id_unique")
+  tenant_id            BigInt
+  job_id               BigInt
+  status               String?   @db.VarChar(50)
+  start_on             DateTime  @db.Timestamptz(6)
+  end_on               DateTime? @db.Timestamptz(6)
+  arrival_window_start DateTime? @db.Timestamptz(6)
+  arrival_window_end   DateTime? @db.Timestamptz(6)
+  technician_ids       BigInt[]
+  custom_fields        Json?     @default("{}")
+  st_created_on        DateTime? @db.Timestamptz(6)
+  st_modified_on       DateTime? @db.Timestamptz(6)
+  local_synced_at      DateTime? @default(now()) @db.Timestamptz(6)
+  full_data            Json
+  actual_arrival       DateTime? @db.Timestamp(6)
+  actual_departure     DateTime? @db.Timestamp(6)
+  technician_name      String?   @db.VarChar(200)
+  last_synced_at       DateTime? @db.Timestamp(6)
+  appointment_number   String?   @db.VarChar(100)
+  type                 String?   @db.VarChar(100)
+  start_time           DateTime? @db.Timestamp(6)
+  end_time             DateTime? @db.Timestamp(6)
+  duration_minutes     Int?      @default(60)
+  notes                String?
+  customer_id          BigInt?
+  location_id          BigInt?
+  technician_id        BigInt?
+
+  @@index([start_time], map: "idx_appointments_date")
+  @@index([technician_id], map: "idx_appointments_technician")
+  @@index([job_id], map: "idx_st_appointments_job")
+  @@index([st_id], map: "idx_st_appointments_st_id")
+  @@index([start_on], map: "idx_st_appointments_start")
+  @@index([status], map: "idx_st_appointments_status")
+  @@index([technician_ids], map: "idx_st_appointments_techs", type: Gin)
+}
+
+model st_business_units {
+  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id           BigInt    @unique(map: "st_business_units_st_id_unique")
+  tenant_id       BigInt
+  name            String    @db.VarChar(255)
+  official_name   String?   @db.VarChar(255)
+  active          Boolean?  @default(true)
+  ghl_pipeline_id String?   @db.VarChar(255)
+  ghl_location_id String?   @db.VarChar(255)
+  st_created_on   DateTime? @db.Timestamptz(6)
+  st_modified_on  DateTime? @db.Timestamptz(6)
+  local_synced_at DateTime? @default(now()) @db.Timestamptz(6)
+  full_data       Json
+  total_jobs      Int?      @default(0)
+  active_jobs     Int?      @default(0)
+  last_synced_at  DateTime? @db.Timestamp(6)
+  code            String?   @db.VarChar(50)
+  email           String?   @db.VarChar(255)
+  phone           String?   @db.VarChar(50)
+  address         String?
+
+  @@index([active], map: "idx_st_business_units_active")
+  @@index([name], map: "idx_st_business_units_name")
+  @@index([st_id], map: "idx_st_business_units_st_id")
+}
+
+model st_call_reasons {
+  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id           BigInt    @unique(map: "st_call_reasons_st_id_unique")
+  tenant_id       BigInt
+  name            String    @db.VarChar(255)
+  active          Boolean?  @default(true)
+  local_synced_at DateTime? @default(now()) @db.Timestamptz(6)
+  full_data       Json
+
+  @@index([name], map: "idx_st_call_reasons_name")
+  @@index([st_id], map: "idx_st_call_reasons_st_id")
+}
+
+model st_campaigns {
+  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id           BigInt    @unique(map: "st_campaigns_st_id_unique")
+  tenant_id       BigInt
+  name            String    @db.VarChar(255)
+  category_id     BigInt?
+  active          Boolean?  @default(true)
+  st_created_on   DateTime? @db.Timestamptz(6)
+  st_modified_on  DateTime? @db.Timestamptz(6)
+  local_synced_at DateTime? @default(now()) @db.Timestamptz(6)
+  full_data       Json
+  last_synced_at  DateTime? @db.Timestamp(6)
+  code            String?   @db.VarChar(50)
+  category        String?   @db.VarChar(100)
+
+  @@index([active], map: "idx_st_campaigns_active")
+  @@index([name], map: "idx_st_campaigns_name")
+  @@index([st_id], map: "idx_st_campaigns_st_id")
+}
+
+model st_custom_fields {
+  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id           BigInt    @unique(map: "st_custom_fields_st_id_unique")
+  tenant_id       BigInt
+  name            String    @db.VarChar(255)
+  data_type       String?   @db.VarChar(50)
+  entity_type     String?   @db.VarChar(50)
+  active          Boolean?  @default(true)
+  local_synced_at DateTime? @default(now()) @db.Timestamptz(6)
+  full_data       Json
+
+  @@index([entity_type], map: "idx_st_custom_fields_entity")
+  @@index([name], map: "idx_st_custom_fields_name")
+  @@index([st_id], map: "idx_st_custom_fields_st_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model st_customers {
+  id                    String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id                 BigInt    @unique(map: "st_customers_st_id_unique")
+  tenant_id             BigInt
+  name                  String    @db.VarChar(500)
+  type                  String?   @db.VarChar(50)
+  email                 String?   @db.VarChar(255)
+  phone                 String?   @db.VarChar(50)
+  phone_numbers         Json?     @default("[]")
+  email_addresses       Json?     @default("[]")
+  address_line1         String?   @db.VarChar(500)
+  address_line2         String?   @db.VarChar(500)
+  city                  String?   @db.VarChar(255)
+  state                 String?   @db.VarChar(100)
+  zip                   String?   @db.VarChar(20)
+  country               String?   @db.VarChar(100)
+  addresses             Json?     @default("[]")
+  balance               Decimal?  @default(0) @db.Decimal(18, 4)
+  active                Boolean?  @default(true)
+  do_not_service        Boolean?  @default(false)
+  do_not_mail           Boolean?  @default(false)
+  tag_type_ids          BigInt[]
+  tags                  Json?     @default("[]")
+  custom_fields         Json?     @default("{}")
+  st_created_on         DateTime? @db.Timestamptz(6)
+  st_modified_on        DateTime? @db.Timestamptz(6)
+  local_synced_at       DateTime? @default(now()) @db.Timestamptz(6)
+  local_created_at      DateTime? @default(now()) @db.Timestamptz(6)
+  full_data             Json
+  total_jobs            Int?      @default(0)
+  completed_jobs        Int?      @default(0)
+  lifetime_value        Decimal?  @default(0) @db.Decimal(12, 2)
+  last_job_date         DateTime? @db.Timestamp(6)
+  first_job_date        DateTime? @db.Timestamp(6)
+  aggregates_updated_at DateTime? @db.Timestamp(6)
+  last_synced_at        DateTime? @db.Timestamp(6)
+  first_name            String?   @db.VarChar(100)
+  last_name             String?   @db.VarChar(100)
+  location_id           BigInt?
+  postal_code           String?   @db.VarChar(20)
+
+  @@index([lifetime_value(sort: Desc), total_jobs(sort: Desc)], map: "idx_customers_aggregates")
+  @@index([last_job_date(sort: Desc)], map: "idx_customers_last_job")
+  @@index([city], map: "idx_st_customers_city")
+  @@index([email], map: "idx_st_customers_email")
+  @@index([st_modified_on], map: "idx_st_customers_modified")
+  @@index([name], map: "idx_st_customers_name")
+  @@index([phone], map: "idx_st_customers_phone")
+  @@index([st_id], map: "idx_st_customers_st_id")
+  @@index([zip], map: "idx_st_customers_zip")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model st_employees {
+  id               String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id            BigInt    @unique(map: "st_employees_st_id_unique")
+  tenant_id        BigInt
+  name             String    @db.VarChar(255)
+  employee_id      String?   @db.VarChar(100)
+  email            String?   @db.VarChar(255)
+  phone            String?   @db.VarChar(50)
+  role             String?   @db.VarChar(100)
+  business_unit_id BigInt?
+  active           Boolean?  @default(true)
+  st_created_on    DateTime? @db.Timestamptz(6)
+  st_modified_on   DateTime? @db.Timestamptz(6)
+  local_synced_at  DateTime? @default(now()) @db.Timestamptz(6)
+  full_data        Json
+  last_synced_at   DateTime? @db.Timestamp(6)
+
+  @@index([active], map: "idx_st_employees_active")
+  @@index([business_unit_id], map: "idx_st_employees_business_unit")
+  @@index([name], map: "idx_st_employees_name")
+  @@index([role], map: "idx_st_employees_role")
+  @@index([st_id], map: "idx_st_employees_st_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model st_estimates {
+  id               String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id            BigInt    @unique(map: "st_estimates_st_id_unique")
+  tenant_id        BigInt
+  job_id           BigInt
+  customer_id      BigInt
+  location_id      BigInt?
+  estimate_number  String    @db.VarChar(100)
+  name             String?   @db.VarChar(500)
+  status           String?   @db.VarChar(50)
+  sold_by          BigInt?
+  sold_on          DateTime? @db.Timestamptz(6)
+  subtotal         Decimal?  @default(0) @db.Decimal(18, 4)
+  total            Decimal?  @default(0) @db.Decimal(18, 4)
+  items            Json?     @default("[]")
+  custom_fields    Json?     @default("{}")
+  st_created_on    DateTime? @db.Timestamptz(6)
+  st_modified_on   DateTime? @db.Timestamptz(6)
+  local_synced_at  DateTime? @default(now()) @db.Timestamptz(6)
+  full_data        Json
+  item_count       Int?      @default(0)
+  sold_by_id       BigInt?
+  last_synced_at   DateTime? @db.Timestamp(6)
+  tax              Decimal?  @default(0) @db.Decimal(12, 2)
+  business_unit_id BigInt?
+
+  @@index([customer_id], map: "idx_estimates_customer")
+  @@index([status], map: "idx_estimates_status")
+  @@index([customer_id], map: "idx_st_estimates_customer")
+  @@index([job_id], map: "idx_st_estimates_job")
+  @@index([st_modified_on], map: "idx_st_estimates_modified")
+  @@index([estimate_number], map: "idx_st_estimates_number")
+  @@index([st_id], map: "idx_st_estimates_st_id")
+  @@index([status], map: "idx_st_estimates_status")
+  @@index([total], map: "idx_st_estimates_total")
+}
+
+model st_installed_equipment {
+  id                String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id             BigInt    @unique(map: "st_installed_equipment_st_id_unique")
+  tenant_id         BigInt
+  location_id       BigInt
+  equipment_type_id BigInt?
+  name              String?   @db.VarChar(500)
+  manufacturer      String?   @db.VarChar(255)
+  model             String?   @db.VarChar(255)
+  serial_number     String?   @db.VarChar(255)
+  install_date      DateTime? @db.Date
+  st_created_on     DateTime? @db.Timestamptz(6)
+  st_modified_on    DateTime? @db.Timestamptz(6)
+  local_synced_at   DateTime? @default(now()) @db.Timestamptz(6)
+  full_data         Json
+
+  @@index([location_id], map: "idx_st_installed_equipment_location")
+  @@index([st_id], map: "idx_st_installed_equipment_st_id")
+  @@index([equipment_type_id], map: "idx_st_installed_equipment_type")
+}
+
+model st_invoices {
+  id               String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id            BigInt    @unique(map: "st_invoices_st_id_unique")
+  tenant_id        BigInt
+  job_id           BigInt
+  customer_id      BigInt
+  location_id      BigInt?
+  business_unit_id BigInt
+  invoice_number   String    @db.VarChar(100)
+  status           String?   @db.VarChar(50)
+  invoice_date     DateTime? @db.Date
+  due_date         DateTime? @db.Date
+  subtotal         Decimal?  @default(0) @db.Decimal(18, 4)
+  total            Decimal?  @default(0) @db.Decimal(18, 4)
+  balance          Decimal?  @default(0) @db.Decimal(18, 4)
+  items            Json?     @default("[]")
+  custom_fields    Json?     @default("{}")
+  st_created_on    DateTime? @db.Timestamptz(6)
+  st_modified_on   DateTime? @db.Timestamptz(6)
+  local_synced_at  DateTime? @default(now()) @db.Timestamptz(6)
+  full_data        Json
+  paid_amount      Decimal?  @default(0) @db.Decimal(12, 2)
+  payment_count    Int?      @default(0)
+  paid_on          DateTime? @db.Timestamp(6)
+  last_synced_at   DateTime? @db.Timestamp(6)
+  payments         String?
+  item_count       Int?      @default(0)
+  tax              Decimal?  @default(0) @db.Decimal(12, 2)
+
+  @@index([customer_id], map: "idx_invoices_customer")
+  @@index([status], map: "idx_invoices_status")
+  @@index([customer_id], map: "idx_st_invoices_customer")
+  @@index([due_date], map: "idx_st_invoices_due_date")
+  @@index([job_id], map: "idx_st_invoices_job")
+  @@index([invoice_number], map: "idx_st_invoices_number")
+  @@index([st_id], map: "idx_st_invoices_st_id")
+  @@index([status], map: "idx_st_invoices_status")
+}
+
+model st_job_types {
+  id               String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id            BigInt    @unique(map: "st_job_types_st_id_unique")
+  tenant_id        BigInt
+  name             String    @db.VarChar(255)
+  active           Boolean?  @default(true)
+  local_synced_at  DateTime? @default(now()) @db.Timestamptz(6)
+  full_data        Json
+  last_synced_at   DateTime? @db.Timestamp(6)
+  code             String?   @db.VarChar(50)
+  business_unit_id BigInt?
+
+  @@index([name], map: "idx_st_job_types_name")
+  @@index([st_id], map: "idx_st_job_types_st_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model st_jobs {
+  id                  String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id               BigInt    @unique(map: "st_jobs_st_id_unique")
+  tenant_id           BigInt
+  job_number          String    @db.VarChar(100)
+  customer_id         BigInt?
+  location_id         BigInt?
+  business_unit_id    BigInt?
+  job_type_id         BigInt?
+  campaign_id         BigInt?
+  summary             String?
+  job_status          String?   @db.VarChar(50)
+  job_completion_time DateTime? @db.Timestamptz(6)
+  invoice_total       Decimal?  @default(0) @db.Decimal(18, 4)
+  balance             Decimal?  @default(0) @db.Decimal(18, 4)
+  total_cost          Decimal?  @default(0) @db.Decimal(18, 4)
+  tag_type_ids        BigInt[]
+  tags                Json?     @default("[]")
+  custom_fields       Json?     @default("{}")
+  ghl_synced_at       DateTime? @db.Timestamptz(6)
+  ghl_opportunity_id  String?   @db.VarChar(255)
+  ghl_sync_status     String?   @db.VarChar(50)
+  ghl_sync_error      String?
+  st_created_on       DateTime? @db.Timestamptz(6)
+  st_modified_on      DateTime? @db.Timestamptz(6)
+  local_synced_at     DateTime? @default(now()) @db.Timestamptz(6)
+  full_data           Json
+  technician_name     String?   @db.VarChar(200)
+  priority            String?   @default("Normal") @db.VarChar(50)
+  last_synced_at      DateTime? @db.Timestamp(6)
+  scheduled_start     DateTime? @db.Timestamp(6)
+  scheduled_end       DateTime? @db.Timestamp(6)
+  completed_on        DateTime? @db.Timestamp(6)
+  technician_id       BigInt?
+
+  @@index([customer_id], map: "idx_jobs_customer")
+  @@index([job_status], map: "idx_jobs_status")
+  @@index([technician_id], map: "idx_jobs_technician")
+  @@index([business_unit_id], map: "idx_st_jobs_business_unit")
+  @@index([customer_id], map: "idx_st_jobs_customer")
+  @@index([location_id], map: "idx_st_jobs_location")
+  @@index([st_modified_on], map: "idx_st_jobs_modified")
+  @@index([job_number], map: "idx_st_jobs_number")
+  @@index([st_id], map: "idx_st_jobs_st_id")
+  @@index([job_status], map: "idx_st_jobs_status")
+}
+
+model st_locations {
+  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id           BigInt    @unique(map: "st_locations_st_id_unique")
+  tenant_id       BigInt
+  customer_id     BigInt
+  name            String?   @db.VarChar(500)
+  street          String?   @db.VarChar(500)
+  unit            String?   @db.VarChar(100)
+  city            String?   @db.VarChar(255)
+  state           String?   @db.VarChar(100)
+  zip             String?   @db.VarChar(20)
+  country         String?   @db.VarChar(100)
+  latitude        Decimal?  @db.Decimal(10, 8)
+  longitude       Decimal?  @db.Decimal(11, 8)
+  phone           String?   @db.VarChar(50)
+  email           String?   @db.VarChar(255)
+  tax_zone_id     BigInt?
+  tag_type_ids    BigInt[]
+  tags            Json?     @default("[]")
+  custom_fields   Json?     @default("{}")
+  st_created_on   DateTime? @db.Timestamptz(6)
+  st_modified_on  DateTime? @db.Timestamptz(6)
+  local_synced_at DateTime? @default(now()) @db.Timestamptz(6)
+  full_data       Json
+
+  @@index([customer_id], map: "idx_locations_customer")
+  @@index([city], map: "idx_st_locations_city")
+  @@index([customer_id], map: "idx_st_locations_customer")
+  @@index([st_id], map: "idx_st_locations_st_id")
+  @@index([zip], map: "idx_st_locations_zip")
+}
+
+model st_payments {
+  id               String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id            BigInt    @unique(map: "st_payments_st_id_unique")
+  tenant_id        BigInt
+  customer_id      BigInt
+  invoice_id       BigInt?
+  payment_number   String?   @db.VarChar(100)
+  payment_type     String?   @db.VarChar(50)
+  payment_method   String?   @db.VarChar(100)
+  status           String?   @db.VarChar(50)
+  amount           Decimal   @db.Decimal(18, 4)
+  unapplied_amount Decimal?  @default(0) @db.Decimal(18, 4)
+  payment_date     DateTime? @db.Date
+  st_created_on    DateTime? @db.Timestamptz(6)
+  st_modified_on   DateTime? @db.Timestamptz(6)
+  local_synced_at  DateTime? @default(now()) @db.Timestamptz(6)
+  full_data        Json
+
+  @@index([customer_id], map: "idx_payments_customer")
+  @@index([invoice_id], map: "idx_payments_invoice")
+  @@index([amount], map: "idx_st_payments_amount")
+  @@index([customer_id], map: "idx_st_payments_customer")
+  @@index([payment_date], map: "idx_st_payments_date")
+  @@index([invoice_id], map: "idx_st_payments_invoice")
+  @@index([st_id], map: "idx_st_payments_st_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model st_sync_log {
+  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  module          String    @db.VarChar(100)
+  sync_type       String    @db.VarChar(50)
+  status          String    @db.VarChar(50)
+  records_fetched Int?      @default(0)
+  records_created Int?      @default(0)
+  records_updated Int?      @default(0)
+  records_failed  Int?      @default(0)
+  started_at      DateTime? @default(now()) @db.Timestamptz(6)
+  completed_at    DateTime? @db.Timestamptz(6)
+  duration_ms     Int?
+  error_message   String?
+  error_details   Json?
+  triggered_by    String?   @db.VarChar(100)
+  parameters      Json?     @default("{}")
+
+  @@index([module], map: "idx_st_sync_log_module")
+  @@index([started_at(sort: Desc)], map: "idx_st_sync_log_started")
+  @@index([status], map: "idx_st_sync_log_status")
+}
+
+model st_tag_types {
+  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id           BigInt    @unique(map: "st_tag_types_st_id_unique")
+  tenant_id       BigInt
+  name            String    @db.VarChar(255)
+  active          Boolean?  @default(true)
+  local_synced_at DateTime? @default(now()) @db.Timestamptz(6)
+  full_data       Json
+  last_synced_at  DateTime? @db.Timestamp(6)
+  code            String?   @db.VarChar(50)
+  color           String?   @db.VarChar(50)
+  entity_type     String?   @db.VarChar(50)
+
+  @@index([name], map: "idx_st_tag_types_name")
+  @@index([st_id], map: "idx_st_tag_types_st_id")
+}
+
+model st_technicians {
+  id               String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id            BigInt    @unique(map: "st_technicians_st_id_unique")
+  tenant_id        BigInt
+  name             String    @db.VarChar(255)
+  employee_id      String?   @db.VarChar(100)
+  email            String?   @db.VarChar(255)
+  phone            String?   @db.VarChar(50)
+  business_unit_id BigInt?
+  active           Boolean?  @default(true)
+  st_created_on    DateTime? @db.Timestamptz(6)
+  st_modified_on   DateTime? @db.Timestamptz(6)
+  local_synced_at  DateTime? @default(now()) @db.Timestamptz(6)
+  full_data        Json
+  total_jobs       Int?      @default(0)
+  completed_jobs   Int?      @default(0)
+  total_revenue    Decimal?  @default(0) @db.Decimal(12, 2)
+  skills           Json?     @default("[]")
+  hire_date        DateTime? @db.Date
+  last_synced_at   DateTime? @db.Timestamp(6)
+  first_name       String?   @db.VarChar(100)
+  last_name        String?   @db.VarChar(100)
+  role             String?   @db.VarChar(100)
+  is_technician    Boolean?  @default(true)
+
+  @@index([active], map: "idx_st_technicians_active")
+  @@index([business_unit_id], map: "idx_st_technicians_business_unit")
+  @@index([name], map: "idx_st_technicians_name")
+  @@index([st_id], map: "idx_st_technicians_st_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model workflow_definitions {
+  id                          String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name                        String               @unique @db.VarChar(255)
+  description                 String?
+  trigger_event               String               @db.VarChar(100)
+  trigger_conditions          Json?                @default("{}")
+  stop_conditions             Json                 @default("[]")
+  steps                       Json                 @default("[]")
+  enabled                     Boolean?             @default(true)
+  max_concurrent_per_customer Int?                 @default(1)
+  priority                    Int?                 @default(0)
+  created_at                  DateTime?            @default(now()) @db.Timestamptz(6)
+  updated_at                  DateTime?            @default(now()) @db.Timestamptz(6)
+  created_by                  String?              @db.VarChar(255)
+  updated_by                  String?              @db.VarChar(255)
+  tags                        String[]             @db.VarChar(100)
+  workflow_instances          workflow_instances[]
+
+  @@index([enabled], map: "idx_workflow_defs_enabled")
+  @@index([name], map: "idx_workflow_defs_name")
+  @@index([trigger_event], map: "idx_workflow_defs_trigger")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model workflow_instances {
+  id                       String                     @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  workflow_id              String                     @db.Uuid
+  entity_type              String                     @db.VarChar(50)
+  entity_id                BigInt
+  customer_id              BigInt
+  status                   String                     @default("active") @db.VarChar(50)
+  current_step             Int?                       @default(0)
+  message_count            Int?                       @default(0)
+  started_at               DateTime?                  @default(now()) @db.Timestamptz(6)
+  completed_at             DateTime?                  @db.Timestamptz(6)
+  stopped_reason           String?                    @db.VarChar(255)
+  execution_log            Json?                      @default("[]")
+  next_action_at           DateTime?                  @db.Timestamptz(6)
+  context                  Json?                      @default("{}")
+  created_at               DateTime?                  @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime?                  @default(now()) @db.Timestamptz(6)
+  workflow_definitions     workflow_definitions       @relation(fields: [workflow_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  workflow_step_executions workflow_step_executions[]
+
+  @@index([customer_id], map: "idx_workflow_instances_customer")
+  @@index([entity_type, entity_id], map: "idx_workflow_instances_entity")
+  @@index([status], map: "idx_workflow_instances_status")
+  @@index([workflow_id], map: "idx_workflow_instances_workflow")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model workflow_step_executions {
+  id                   String             @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  workflow_instance_id String             @db.Uuid
+  step_number          Int
+  action_type          String?            @db.VarChar(50)
+  action_description   String?
+  action_input         Json?
+  action_output        Json?
+  status               String             @default("pending") @db.VarChar(50)
+  error_message        String?
+  retry_count          Int?               @default(0)
+  scheduled_for        DateTime?          @db.Timestamptz(6)
+  started_at           DateTime?          @db.Timestamptz(6)
+  completed_at         DateTime?          @db.Timestamptz(6)
+  duration_ms          Int?
+  created_at           DateTime?          @default(now()) @db.Timestamptz(6)
+  workflow_instances   workflow_instances @relation(fields: [workflow_instance_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([workflow_instance_id], map: "idx_step_executions_instance")
+  @@index([scheduled_for], map: "idx_step_executions_scheduled")
+  @@index([status], map: "idx_step_executions_status")
+}
+
+model raw_st_appointment_assignments {
+  id             String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenant_id      BigInt
+  appointment_id BigInt
+  technician_id  BigInt
+  assigned_on    DateTime? @db.Timestamptz(6)
+  fetched_at     DateTime? @default(now()) @db.Timestamptz(6)
+  full_data      Json
+
+  @@unique([appointment_id, technician_id])
+  @@index([appointment_id], map: "idx_raw_st_appt_assign_appt")
+  @@index([technician_id], map: "idx_raw_st_appt_assign_tech")
+}
+
+model raw_st_appointments {
+  id                   String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id                BigInt    @unique
+  tenant_id            BigInt
+  job_id               BigInt
+  appointment_number   String?   @db.VarChar(50)
+  start_time           DateTime? @db.Timestamptz(6)
+  end_time             DateTime? @db.Timestamptz(6)
+  arrival_window_start DateTime? @db.Timestamptz(6)
+  arrival_window_end   DateTime? @db.Timestamptz(6)
+  status               String?   @db.VarChar(50)
+  special_instructions String?
+  customer_id          BigInt?
+  unused               Boolean?  @default(false)
+  created_by_id        BigInt?
+  is_confirmed         Boolean?  @default(false)
+  active               Boolean?  @default(true)
+  st_created_on        DateTime? @db.Timestamptz(6)
+  st_modified_on       DateTime? @db.Timestamptz(6)
+  fetched_at           DateTime? @default(now()) @db.Timestamptz(6)
+  full_data            Json
+
+  @@index([job_id], map: "idx_raw_st_appointments_job")
+  @@index([st_modified_on], map: "idx_raw_st_appointments_modified")
+  @@index([st_id], map: "idx_raw_st_appointments_st_id")
+  @@index([start_time], map: "idx_raw_st_appointments_start")
+  @@index([status], map: "idx_raw_st_appointments_status")
+}
+
+model raw_st_business_units {
+  id               String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id            BigInt    @unique
+  tenant_id        BigInt
+  active           Boolean?  @default(true)
+  name             String?   @db.VarChar(255)
+  official_name    String?   @db.VarChar(255)
+  email            String?   @db.VarChar(255)
+  currency         String?   @db.VarChar(10)
+  phone            String?   @db.VarChar(50)
+  invoice_header   String?
+  invoice_message  String?
+  default_tax_rate Decimal?  @db.Decimal(8, 4)
+  address          Json?
+  trade            String?   @db.VarChar(100)
+  division         String?   @db.VarChar(100)
+  tag_type_ids     BigInt[]  @default([])
+  external_data    Json?
+  st_created_on    DateTime? @db.Timestamptz(6)
+  st_modified_on   DateTime? @db.Timestamptz(6)
+  fetched_at       DateTime? @default(now()) @db.Timestamptz(6)
+  full_data        Json
+
+  @@index([active], map: "idx_raw_st_business_units_active")
+  @@index([st_id], map: "idx_raw_st_business_units_st_id")
+}
+
+model raw_st_campaigns {
+  id             String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id          BigInt    @unique
+  tenant_id      BigInt
+  name           String?   @db.VarChar(255)
+  active         Boolean?  @default(true)
+  category_id    BigInt?
+  code           String?   @db.VarChar(50)
+  st_created_on  DateTime? @db.Timestamptz(6)
+  st_modified_on DateTime? @db.Timestamptz(6)
+  fetched_at     DateTime? @default(now()) @db.Timestamptz(6)
+  full_data      Json
+
+  @@index([active], map: "idx_raw_st_campaigns_active")
+  @@index([st_id], map: "idx_raw_st_campaigns_st_id")
+}
+
+model raw_st_customer_contacts {
+  id             String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id          BigInt
+  tenant_id      BigInt
+  customer_id    BigInt
+  type           String?   @db.VarChar(50)
+  value          String?
+  memo           String?
+  phone_settings Json?
+  preferences    Json?
+  st_created_on  DateTime? @db.Timestamptz(6)
+  st_modified_on DateTime? @db.Timestamptz(6)
+  fetched_at     DateTime? @default(now()) @db.Timestamptz(6)
+  full_data      Json
+
+  @@unique([st_id, customer_id])
+  @@index([customer_id], map: "idx_raw_st_customer_contacts_customer")
+  @@index([fetched_at], map: "idx_raw_st_customer_contacts_fetched")
+  @@index([st_modified_on], map: "idx_raw_st_customer_contacts_modified")
+  @@index([type], map: "idx_raw_st_customer_contacts_type")
+}
+
+model raw_st_customers {
+  id                   String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id                BigInt    @unique
+  tenant_id            BigInt
+  active               Boolean?  @default(true)
+  name                 String?   @db.VarChar(500)
+  type                 String?   @db.VarChar(50)
+  address              Json?     @default("{}")
+  custom_fields        Json?     @default("[]")
+  balance              Decimal?  @default(0) @db.Decimal(18, 4)
+  tax_exempt           Boolean?  @default(false)
+  tag_type_ids         BigInt[]  @default([])
+  do_not_mail          Boolean?  @default(false)
+  do_not_service       Boolean?  @default(false)
+  national_account     Boolean?  @default(false)
+  created_by_id        BigInt?
+  merged_to_id         BigInt?
+  payment_term_id      BigInt?
+  credit_limit         Decimal?  @db.Decimal(18, 4)
+  credit_limit_balance Decimal?  @db.Decimal(18, 4)
+  external_data        Json?
+  st_created_on        DateTime? @db.Timestamptz(6)
+  st_modified_on       DateTime? @db.Timestamptz(6)
+  fetched_at           DateTime? @default(now()) @db.Timestamptz(6)
+  full_data            Json
+
+  @@index([fetched_at], map: "idx_raw_st_customers_fetched")
+  @@index([st_modified_on], map: "idx_raw_st_customers_modified")
+  @@index([st_id], map: "idx_raw_st_customers_st_id")
+}
+
+model raw_st_employees {
+  id               String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id            BigInt    @unique
+  tenant_id        BigInt
+  user_id          BigInt?
+  name             String?   @db.VarChar(255)
+  role             String?   @db.VarChar(100)
+  role_ids         BigInt[]  @default([])
+  business_unit_id BigInt?
+  email            String?   @db.VarChar(255)
+  phone            String?   @db.VarChar(50)
+  login_name       String?   @db.VarChar(100)
+  active           Boolean?  @default(true)
+  permissions      Json?     @default("[]")
+  custom_fields    Json?     @default("[]")
+  st_created_on    DateTime? @db.Timestamptz(6)
+  st_modified_on   DateTime? @db.Timestamptz(6)
+  fetched_at       DateTime? @default(now()) @db.Timestamptz(6)
+  full_data        Json
+
+  @@index([active], map: "idx_raw_st_employees_active")
+  @@index([st_id], map: "idx_raw_st_employees_st_id")
+}
+
+model raw_st_estimates {
+  id                 String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id              BigInt    @unique
+  tenant_id          BigInt
+  job_id             BigInt?
+  project_id         BigInt?
+  location_id        BigInt?
+  customer_id        BigInt?
+  name               String?   @db.VarChar(255)
+  job_number         String?   @db.VarChar(50)
+  status             String?   @db.VarChar(50)
+  review_status      String?   @db.VarChar(50)
+  summary            String?
+  sold_on            DateTime? @db.Timestamptz(6)
+  sold_by            BigInt?
+  active             Boolean?  @default(true)
+  items              Json?     @default("[]")
+  subtotal           Decimal?  @default(0) @db.Decimal(18, 4)
+  tax                Decimal?  @default(0) @db.Decimal(18, 4)
+  business_unit_id   BigInt?
+  business_unit_name String?   @db.VarChar(255)
+  external_links     Json?     @default("[]")
+  is_recommended     Boolean?  @default(false)
+  st_created_on      DateTime? @db.Timestamptz(6)
+  st_modified_on     DateTime? @db.Timestamptz(6)
+  fetched_at         DateTime? @default(now()) @db.Timestamptz(6)
+  full_data          Json
+
+  @@index([customer_id], map: "idx_raw_st_estimates_customer")
+  @@index([job_id], map: "idx_raw_st_estimates_job")
+  @@index([st_modified_on], map: "idx_raw_st_estimates_modified")
+  @@index([st_id], map: "idx_raw_st_estimates_st_id")
+  @@index([status], map: "idx_raw_st_estimates_status")
+}
+
+model raw_st_installed_equipment {
+  id                          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id                       BigInt    @unique
+  tenant_id                   BigInt
+  active                      Boolean?  @default(true)
+  equipment_id                BigInt?
+  location_id                 BigInt?
+  customer_id                 BigInt?
+  invoice_item_id             BigInt?
+  name                        String?   @db.VarChar(255)
+  type                        String?   @db.VarChar(100)
+  installed_on                DateTime? @db.Timestamptz(6)
+  serial_number               String?   @db.VarChar(100)
+  barcode_id                  String?   @db.VarChar(100)
+  memo                        String?
+  manufacturer                String?   @db.VarChar(255)
+  model                       String?   @db.VarChar(255)
+  cost                        Decimal?  @db.Decimal(18, 4)
+  status                      Int?
+  manufacturer_warranty_start DateTime? @db.Date
+  manufacturer_warranty_end   DateTime? @db.Date
+  service_warranty_start      DateTime? @db.Date
+  service_warranty_end        DateTime? @db.Date
+  tags                        Json?     @default("[]")
+  st_created_on               DateTime? @db.Timestamptz(6)
+  st_modified_on              DateTime? @db.Timestamptz(6)
+  fetched_at                  DateTime? @default(now()) @db.Timestamptz(6)
+  full_data                   Json
+
+  @@index([customer_id], map: "idx_raw_st_installed_equip_customer")
+  @@index([location_id], map: "idx_raw_st_installed_equip_location")
+  @@index([st_id], map: "idx_raw_st_installed_equip_st_id")
+}
+
+model raw_st_invoices {
+  id               String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id            BigInt    @unique
+  tenant_id        BigInt
+  reference_number String?   @db.VarChar(100)
+  invoice_date     DateTime? @db.Date
+  due_date         DateTime? @db.Date
+  subtotal         Decimal?  @default(0) @db.Decimal(18, 4)
+  sales_tax        Decimal?  @default(0) @db.Decimal(18, 4)
+  total            Decimal?  @default(0) @db.Decimal(18, 4)
+  balance          Decimal?  @default(0) @db.Decimal(18, 4)
+  invoice_type     String?   @db.VarChar(50)
+  customer         Json?
+  customer_address Json?
+  location         Json?
+  location_address Json?
+  business_unit    Json?
+  job              Json?
+  items            Json?     @default("[]")
+  custom_fields    Json?     @default("[]")
+  active           Boolean?  @default(true)
+  sync_status      String?   @db.VarChar(50)
+  paid_on          DateTime? @db.Timestamptz(6)
+  summary          String?
+  discount_total   Decimal?  @default(0) @db.Decimal(18, 4)
+  st_created_on    DateTime? @db.Timestamptz(6)
+  st_modified_on   DateTime? @db.Timestamptz(6)
+  fetched_at       DateTime? @default(now()) @db.Timestamptz(6)
+  full_data        Json
+
+  @@index([fetched_at], map: "idx_raw_st_invoices_fetched")
+  @@index([st_modified_on], map: "idx_raw_st_invoices_modified")
+  @@index([reference_number], map: "idx_raw_st_invoices_reference")
+  @@index([st_id], map: "idx_raw_st_invoices_st_id")
+}
+
+model raw_st_job_types {
+  id                String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id             BigInt    @unique
+  tenant_id         BigInt
+  name              String?   @db.VarChar(255)
+  business_unit_ids BigInt[]  @default([])
+  skills            Json?     @default("[]")
+  tag_type_ids      BigInt[]  @default([])
+  priority          String?   @db.VarChar(20)
+  duration          Int?
+  sold_threshold    Decimal?  @db.Decimal(18, 4)
+  class             String?   @db.VarChar(50)
+  summary           String?
+  no_charge         Boolean?  @default(false)
+  active            Boolean?  @default(true)
+  external_data     Json?
+  st_created_on     DateTime? @db.Timestamptz(6)
+  st_modified_on    DateTime? @db.Timestamptz(6)
+  fetched_at        DateTime? @default(now()) @db.Timestamptz(6)
+  full_data         Json
+
+  @@index([active], map: "idx_raw_st_job_types_active")
+  @@index([st_id], map: "idx_raw_st_job_types_st_id")
+}
+
+model raw_st_jobs {
+  id                        String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id                     BigInt    @unique
+  tenant_id                 BigInt
+  job_number                String?   @db.VarChar(50)
+  project_id                BigInt?
+  customer_id               BigInt?
+  location_id               BigInt?
+  job_status                String?   @db.VarChar(50)
+  completed_on              DateTime? @db.Timestamptz(6)
+  business_unit_id          BigInt?
+  job_type_id               BigInt?
+  priority                  String?   @default("Normal") @db.VarChar(20)
+  campaign_id               BigInt?
+  appointment_count         Int?      @default(0)
+  first_appointment_id      BigInt?
+  last_appointment_id       BigInt?
+  recall_for_id             BigInt?
+  warranty_id               BigInt?
+  job_generated_lead_source Json?
+  no_charge                 Boolean?  @default(false)
+  notifications_enabled     Boolean?  @default(true)
+  created_by_id             BigInt?
+  tag_type_ids              BigInt[]  @default([])
+  lead_call_id              BigInt?
+  partner_lead_call_id      BigInt?
+  booking_id                BigInt?
+  sold_by_id                BigInt?
+  customer_po               String?   @db.VarChar(100)
+  invoice_id                BigInt?
+  membership_id             BigInt?
+  total                     Decimal?  @default(0) @db.Decimal(18, 4)
+  created_from_estimate_id  BigInt?
+  estimate_ids              BigInt[]  @default([])
+  summary                   String?
+  custom_fields             Json?     @default("[]")
+  external_data             Json?
+  st_created_on             DateTime? @db.Timestamptz(6)
+  st_modified_on            DateTime? @db.Timestamptz(6)
+  fetched_at                DateTime? @default(now()) @db.Timestamptz(6)
+  full_data                 Json
+
+  @@index([customer_id], map: "idx_raw_st_jobs_customer")
+  @@index([fetched_at], map: "idx_raw_st_jobs_fetched")
+  @@index([job_number], map: "idx_raw_st_jobs_job_number")
+  @@index([location_id], map: "idx_raw_st_jobs_location")
+  @@index([st_modified_on], map: "idx_raw_st_jobs_modified")
+  @@index([st_id], map: "idx_raw_st_jobs_st_id")
+  @@index([job_status], map: "idx_raw_st_jobs_status")
+}
+
+model raw_st_location_contacts {
+  id             String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id          BigInt
+  tenant_id      BigInt
+  location_id    BigInt
+  type           String?   @db.VarChar(50)
+  value          String?
+  memo           String?
+  phone_settings Json?
+  preferences    Json?
+  st_created_on  DateTime? @db.Timestamptz(6)
+  st_modified_on DateTime? @db.Timestamptz(6)
+  fetched_at     DateTime? @default(now()) @db.Timestamptz(6)
+  full_data      Json
+
+  @@unique([st_id, location_id])
+  @@index([location_id], map: "idx_raw_st_location_contacts_location")
+  @@index([st_modified_on], map: "idx_raw_st_location_contacts_modified")
+  @@index([type], map: "idx_raw_st_location_contacts_type")
+}
+
+model raw_st_locations {
+  id             String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id          BigInt    @unique
+  tenant_id      BigInt
+  customer_id    BigInt
+  active         Boolean?  @default(true)
+  name           String?   @db.VarChar(500)
+  address        Json?     @default("{}")
+  custom_fields  Json?     @default("[]")
+  created_by_id  BigInt?
+  merged_to_id   BigInt?
+  zone_id        BigInt?
+  tax_zone_id    BigInt?
+  tax_exempt     Boolean?  @default(false)
+  tag_type_ids   BigInt[]  @default([])
+  external_data  Json?
+  st_created_on  DateTime? @db.Timestamptz(6)
+  st_modified_on DateTime? @db.Timestamptz(6)
+  fetched_at     DateTime? @default(now()) @db.Timestamptz(6)
+  full_data      Json
+
+  @@index([customer_id], map: "idx_raw_st_locations_customer")
+  @@index([fetched_at], map: "idx_raw_st_locations_fetched")
+  @@index([st_modified_on], map: "idx_raw_st_locations_modified")
+  @@index([st_id], map: "idx_raw_st_locations_st_id")
+}
+
+model raw_st_payments {
+  id               String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id            BigInt    @unique
+  tenant_id        BigInt
+  active           Boolean?  @default(true)
+  applied_to       Json?     @default("[]")
+  auth_code        String?   @db.VarChar(255)
+  batch            Json?
+  business_unit    Json?
+  check_number     String?   @db.VarChar(255)
+  created_by       String?   @db.VarChar(255)
+  customer         Json?
+  custom_fields    Json?     @default("[]")
+  payment_date     DateTime? @db.Timestamptz(6)
+  deposit          Json?
+  gl_account       Json?
+  memo             String?
+  reference_number String?   @db.VarChar(255)
+  total            Decimal?  @default(0) @db.Decimal(18, 4)
+  payment_type     String?   @db.VarChar(50)
+  type_id          String?   @db.VarChar(50)
+  unapplied_amount Decimal?  @default(0) @db.Decimal(18, 4)
+  sync_status      String?   @db.VarChar(50)
+  st_created_on    DateTime? @db.Timestamptz(6)
+  st_modified_on   DateTime? @db.Timestamptz(6)
+  fetched_at       DateTime? @default(now()) @db.Timestamptz(6)
+  full_data        Json
+
+  @@index([payment_date], map: "idx_raw_st_payments_date")
+  @@index([st_modified_on], map: "idx_raw_st_payments_modified")
+  @@index([st_id], map: "idx_raw_st_payments_st_id")
+}
+
+model raw_st_pricebook_categories {
+  id                String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id             BigInt    @unique
+  tenant_id         BigInt
+  name              String?   @db.VarChar(255)
+  active            Boolean?  @default(true)
+  description       String?
+  image             String?
+  parent_id         BigInt?
+  position          Int?
+  category_type     String?   @db.VarChar(50)
+  subcategories     Json?     @default("[]")
+  business_unit_ids BigInt[]  @default([])
+  fetched_at        DateTime? @default(now()) @db.Timestamptz(6)
+  full_data         Json
+
+  @@index([parent_id], map: "idx_raw_st_pb_categories_parent")
+  @@index([st_id], map: "idx_raw_st_pb_categories_st_id")
+  @@index([category_type], map: "idx_raw_st_pb_categories_type")
+}
+
+model raw_st_pricebook_equipment {
+  id                    String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id                 BigInt    @unique
+  tenant_id             BigInt
+  code                  String?   @db.VarChar(100)
+  display_name          String?   @db.VarChar(500)
+  description           String?
+  price                 Decimal?  @db.Decimal(18, 4)
+  member_price          Decimal?  @db.Decimal(18, 4)
+  add_on_price          Decimal?  @db.Decimal(18, 4)
+  cost                  Decimal?  @db.Decimal(18, 4)
+  active                Boolean?  @default(true)
+  taxable               Boolean?  @default(false)
+  manufacturer          String?   @db.VarChar(255)
+  model                 String?   @db.VarChar(255)
+  manufacturer_warranty Json?
+  service_warranty      Json?
+  categories            Json?     @default("[]")
+  assets                Json?     @default("[]")
+  primary_vendor        Json?
+  other_vendors         Json?     @default("[]")
+  equipment_materials   Json?     @default("[]")
+  recommendations       Json?     @default("[]")
+  st_created_on         DateTime? @db.Timestamptz(6)
+  st_modified_on        DateTime? @db.Timestamptz(6)
+  fetched_at            DateTime? @default(now()) @db.Timestamptz(6)
+  full_data             Json
+
+  @@index([active], map: "idx_raw_st_pb_equipment_active")
+  @@index([code], map: "idx_raw_st_pb_equipment_code")
+  @@index([st_id], map: "idx_raw_st_pb_equipment_st_id")
+}
+
+model raw_st_pricebook_materials {
+  id                   String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id                BigInt    @unique
+  tenant_id            BigInt
+  code                 String?   @db.VarChar(100)
+  display_name         String?   @db.VarChar(500)
+  description          String?
+  cost                 Decimal?  @db.Decimal(18, 4)
+  price                Decimal?  @db.Decimal(18, 4)
+  member_price         Decimal?  @db.Decimal(18, 4)
+  add_on_price         Decimal?  @db.Decimal(18, 4)
+  active               Boolean?  @default(true)
+  taxable              Boolean?  @default(false)
+  hours                Decimal?  @db.Decimal(8, 4)
+  unit_of_measure      String?   @db.VarChar(50)
+  is_inventory         Boolean?  @default(false)
+  account              String?   @db.VarChar(100)
+  cost_of_sale_account String?   @db.VarChar(100)
+  asset_account        String?   @db.VarChar(100)
+  primary_vendor       Json?
+  other_vendors        Json?     @default("[]")
+  categories           Json?     @default("[]")
+  assets               Json?     @default("[]")
+  st_created_on        DateTime? @db.Timestamptz(6)
+  st_modified_on       DateTime? @db.Timestamptz(6)
+  fetched_at           DateTime? @default(now()) @db.Timestamptz(6)
+  full_data            Json
+
+  @@index([active], map: "idx_raw_st_pb_materials_active")
+  @@index([code], map: "idx_raw_st_pb_materials_code")
+  @@index([st_id], map: "idx_raw_st_pb_materials_st_id")
+}
+
+model raw_st_pricebook_services {
+  id                String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id             BigInt    @unique
+  tenant_id         BigInt
+  code              String?   @db.VarChar(100)
+  display_name      String?   @db.VarChar(500)
+  description       String?
+  price             Decimal?  @db.Decimal(18, 4)
+  member_price      Decimal?  @db.Decimal(18, 4)
+  add_on_price      Decimal?  @db.Decimal(18, 4)
+  active            Boolean?  @default(true)
+  taxable           Boolean?  @default(false)
+  hours             Decimal?  @db.Decimal(8, 4)
+  is_labor          Boolean?  @default(false)
+  account           String?   @db.VarChar(100)
+  warranty          Json?
+  categories        Json?     @default("[]")
+  assets            Json?     @default("[]")
+  service_materials Json?     @default("[]")
+  service_equipment Json?     @default("[]")
+  recommendations   Json?     @default("[]")
+  upgrades          Json?     @default("[]")
+  st_created_on     DateTime? @db.Timestamptz(6)
+  st_modified_on    DateTime? @db.Timestamptz(6)
+  fetched_at        DateTime? @default(now()) @db.Timestamptz(6)
+  full_data         Json
+
+  @@index([active], map: "idx_raw_st_pb_services_active")
+  @@index([code], map: "idx_raw_st_pb_services_code")
+  @@index([st_id], map: "idx_raw_st_pb_services_st_id")
+}
+
+model raw_st_tag_types {
+  id             String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id          BigInt    @unique
+  tenant_id      BigInt
+  name           String?   @db.VarChar(255)
+  active         Boolean?  @default(true)
+  code           String?   @db.VarChar(50)
+  color          String?   @db.VarChar(20)
+  entity_type    String?   @db.VarChar(50)
+  st_modified_on DateTime? @db.Timestamptz(6)
+  fetched_at     DateTime? @default(now()) @db.Timestamptz(6)
+  full_data      Json
+
+  @@index([st_id], map: "idx_raw_st_tag_types_st_id")
+}
+
+model raw_st_teams {
+  id         String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id      BigInt    @unique
+  tenant_id  BigInt
+  name       String?   @db.VarChar(255)
+  active     Boolean?  @default(true)
+  fetched_at DateTime? @default(now()) @db.Timestamptz(6)
+  full_data  Json
+
+  @@index([st_id], map: "idx_raw_st_teams_st_id")
+}
+
+model raw_st_technicians {
+  id               String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id            BigInt    @unique
+  tenant_id        BigInt
+  user_id          BigInt?
+  name             String?   @db.VarChar(255)
+  role_ids         BigInt[]  @default([])
+  business_unit_id BigInt?
+  main_zone_id     BigInt?
+  zone_ids         BigInt[]  @default([])
+  email            String?   @db.VarChar(255)
+  phone            String?   @db.VarChar(50)
+  login_name       String?   @db.VarChar(100)
+  home             Json?
+  daily_goal       Decimal?  @db.Decimal(18, 4)
+  is_managed_tech  Boolean?  @default(false)
+  custom_fields    Json?     @default("[]")
+  active           Boolean?  @default(true)
+  burden_rate      Decimal?  @db.Decimal(18, 4)
+  team             String?   @db.VarChar(100)
+  job_filter       String?   @db.VarChar(100)
+  permissions      Json?     @default("[]")
+  st_created_on    DateTime? @db.Timestamptz(6)
+  st_modified_on   DateTime? @db.Timestamptz(6)
+  fetched_at       DateTime? @default(now()) @db.Timestamptz(6)
+  full_data        Json
+
+  @@index([active], map: "idx_raw_st_technicians_active")
+  @@index([business_unit_id], map: "idx_raw_st_technicians_bu")
+  @@index([st_id], map: "idx_raw_st_technicians_st_id")
+}
+
+model raw_st_zones {
+  id         String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  st_id      BigInt    @unique
+  tenant_id  BigInt
+  name       String?   @db.VarChar(255)
+  active     Boolean?  @default(true)
+  fetched_at DateTime? @default(now()) @db.Timestamptz(6)
+  full_data  Json
+
+  @@index([st_id], map: "idx_raw_st_zones_st_id")
+}
+
+model raw_sync_state {
+  id                      String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  table_name              String    @unique @db.VarChar(100)
+  endpoint                String    @db.VarChar(255)
+  last_full_sync          DateTime? @db.Timestamptz(6)
+  last_incremental_sync   DateTime? @db.Timestamptz(6)
+  last_modified_on_cursor DateTime? @db.Timestamptz(6)
+  continuation_token      String?
+  records_count           BigInt?   @default(0)
+  sync_status             String?   @default("pending") @db.VarChar(50)
+  last_error              String?
+  created_at              DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime? @default(now()) @db.Timestamptz(6)
+}
 
 enum SyncStatus {
   synced
@@ -96,814 +1840,50 @@ enum SyncJobStatus {
   @@map("sync_job_status")
 }
 
-// ============================================
-// MODEL: PricebookCategory
-// ============================================
-
-model PricebookCategory {
-  id          String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  stId        BigInt  @unique @map("st_id")
-  tenantId    BigInt  @map("tenant_id")
-  name        String  @db.VarChar(255)
-  code        String? @db.VarChar(100)
-  parentId    BigInt? @map("parent_id")
-  displayOrder Int    @default(0) @map("display_order")
-  active      Boolean @default(true)
-  categoryType String? @map("category_type") @db.VarChar(50)
-
-  // ServiceTitan Timestamps
-  stCreatedOn  DateTime? @map("st_created_on") @db.Timestamptz(6)
-  stModifiedOn DateTime? @map("st_modified_on") @db.Timestamptz(6)
-
-  // Local Timestamps
-  localCreatedAt  DateTime @default(now()) @map("local_created_at") @db.Timestamptz(6)
-  localModifiedAt DateTime @default(now()) @updatedAt @map("local_modified_at") @db.Timestamptz(6)
-
-  // Sync Metadata
-  lastSyncedAt  DateTime?     @map("last_synced_at") @db.Timestamptz(6)
-  syncStatus    SyncStatus    @default(synced) @map("sync_status")
-  syncDirection SyncDirection? @map("sync_direction")
-  syncError     String?       @map("sync_error") @db.Text
-
-  // Conflict Tracking
-  hasConflict  Boolean @default(false) @map("has_conflict")
-  conflictData Json?   @map("conflict_data")
-
-  // Soft Delete
-  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
-  deletedInSt Boolean   @default(false) @map("deleted_in_st")
-
-  // Additional Metadata
-  metadata Json @default("{}") @db.JsonB
-
-  // Relations
-  materials  PricebookMaterial[]
-  services   PricebookService[]
-  equipment  PricebookEquipment[]
-  chatSessions ChatSession[]
-
-  @@map("pricebook_categories")
-  @@index([stId])
-  @@index([tenantId])
-  @@index([parentId])
-  @@index([name])
-  @@index([code])
-  @@index([syncStatus])
-  @@index([stModifiedOn])
+enum ghl_entity_type {
+  contact
+  opportunity
+  task
+  note
+  appointment
 }
 
-// ============================================
-// MODEL: PricebookMaterial
-// ============================================
-
-model PricebookMaterial {
-  id         String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  stId       BigInt  @unique @map("st_id")
-  tenantId   BigInt  @map("tenant_id")
-  categoryId BigInt? @map("category_id")
-
-  // Basic Info
-  code        String  @db.VarChar(100)
-  name        String  @db.VarChar(500)
-  description String? @db.Text
-  displayName String? @map("display_name") @db.VarChar(500)
-
-  // Product Details
-  manufacturer String? @db.VarChar(255)
-  modelNumber  String? @map("model_number") @db.VarChar(255)
-  upc          String? @db.VarChar(50)
-  sku          String? @db.VarChar(100)
-  partNumber   String? @map("part_number") @db.VarChar(100)
-
-  // Pricing
-  cost        Decimal? @db.Decimal(18, 4)
-  price       Decimal? @db.Decimal(18, 4)
-  memberPrice Decimal? @map("member_price") @db.Decimal(18, 4)
-  addOnPrice  Decimal? @map("add_on_price") @db.Decimal(18, 4)
-  hours       Decimal? @db.Decimal(10, 4)
-
-  // Units
-  unitOfMeasure   String?  @map("unit_of_measure") @db.VarChar(50)
-  quantityOnHand  Decimal? @map("quantity_on_hand") @db.Decimal(18, 4)
-  quantityOnOrder Decimal? @map("quantity_on_order") @db.Decimal(18, 4)
-
-  // Warranty & Commission
-  warrantyMonths  Int?     @map("warranty_months")
-  commissionBonus Decimal? @map("commission_bonus") @db.Decimal(18, 4)
-  payType         String?  @map("pay_type") @db.VarChar(50)
-
-  // Flags
-  active    Boolean @default(true)
-  taxable   Boolean @default(true)
-  crossSell Boolean @default(false) @map("cross_sell")
-  account   String? @db.VarChar(100)
-
-  // Assets
-  primaryVendorId BigInt? @map("primary_vendor_id")
-  images          Json    @default("[]") @db.JsonB
-  assets          Json    @default("[]") @db.JsonB
-
-  // Custom Fields & Tags
-  customFields Json @default("{}") @map("custom_fields") @db.JsonB
-  tags         Json @default("[]") @db.JsonB
-  externalData Json @default("{}") @map("external_data") @db.JsonB
-
-  // ServiceTitan Timestamps
-  stCreatedOn  DateTime? @map("st_created_on") @db.Timestamptz(6)
-  stModifiedOn DateTime? @map("st_modified_on") @db.Timestamptz(6)
-
-  // Local Timestamps
-  localCreatedAt  DateTime @default(now()) @map("local_created_at") @db.Timestamptz(6)
-  localModifiedAt DateTime @default(now()) @updatedAt @map("local_modified_at") @db.Timestamptz(6)
-
-  // Sync Metadata
-  lastSyncedAt  DateTime?     @map("last_synced_at") @db.Timestamptz(6)
-  syncStatus    SyncStatus    @default(synced) @map("sync_status")
-  syncDirection SyncDirection? @map("sync_direction")
-  syncError     String?       @map("sync_error") @db.Text
-
-  // Conflict Tracking
-  hasConflict  Boolean @default(false) @map("has_conflict")
-  conflictData Json?   @map("conflict_data")
-
-  // Soft Delete
-  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
-  deletedInSt Boolean   @default(false) @map("deleted_in_st")
-
-  // AI Embedding (stored as raw vector in DB, accessed via raw queries)
-  // embedding Unsupported("vector(1536)")?
-
-  // Additional Metadata
-  metadata Json @default("{}") @db.JsonB
-
-  // Foreign Key to local category
-  categoryUuid String?            @map("category_uuid") @db.Uuid
-  category     PricebookCategory? @relation(fields: [categoryUuid], references: [id], onDelete: SetNull)
-
-  @@map("pricebook_materials")
-  @@index([stId])
-  @@index([tenantId])
-  @@index([categoryId])
-  @@index([categoryUuid])
-  @@index([code])
-  @@index([name])
-  @@index([manufacturer])
-  @@index([sku])
-  @@index([syncStatus])
-  @@index([stModifiedOn])
-  @@index([price])
-}
-
-// ============================================
-// MODEL: PricebookService
-// ============================================
-
-model PricebookService {
-  id         String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  stId       BigInt  @unique @map("st_id")
-  tenantId   BigInt  @map("tenant_id")
-  categoryId BigInt? @map("category_id")
-
-  // Basic Info
-  code        String  @db.VarChar(100)
-  name        String  @db.VarChar(500)
-  description String? @db.Text
-  displayName String? @map("display_name") @db.VarChar(500)
-
-  // Pricing
-  price         Decimal? @db.Decimal(18, 4)
-  memberPrice   Decimal? @map("member_price") @db.Decimal(18, 4)
-  addOnPrice    Decimal? @map("add_on_price") @db.Decimal(18, 4)
-  durationHours Decimal? @map("duration_hours") @db.Decimal(10, 4)
-
-  // Labor
-  recommendedHours Decimal? @map("recommended_hours") @db.Decimal(10, 4)
-  laborRate        Decimal? @map("labor_rate") @db.Decimal(18, 4)
-
-  // Related Items
-  materialsIncluded Json @default("[]") @map("materials_included") @db.JsonB
-  equipmentIncluded Json @default("[]") @map("equipment_included") @db.JsonB
-
-  // Warranty & Commission
-  warrantyMonths  Int?     @map("warranty_months")
-  commissionBonus Decimal? @map("commission_bonus") @db.Decimal(18, 4)
-  payType         String?  @map("pay_type") @db.VarChar(50)
-
-  // Flags
-  active  Boolean @default(true)
-  taxable Boolean @default(true)
-  account String? @db.VarChar(100)
-
-  // Assets
-  images Json @default("[]") @db.JsonB
-  assets Json @default("[]") @db.JsonB
-
-  // Custom Fields & Tags
-  customFields Json @default("{}") @map("custom_fields") @db.JsonB
-  tags         Json @default("[]") @db.JsonB
-  externalData Json @default("{}") @map("external_data") @db.JsonB
-
-  // ServiceTitan Timestamps
-  stCreatedOn  DateTime? @map("st_created_on") @db.Timestamptz(6)
-  stModifiedOn DateTime? @map("st_modified_on") @db.Timestamptz(6)
-
-  // Local Timestamps
-  localCreatedAt  DateTime @default(now()) @map("local_created_at") @db.Timestamptz(6)
-  localModifiedAt DateTime @default(now()) @updatedAt @map("local_modified_at") @db.Timestamptz(6)
-
-  // Sync Metadata
-  lastSyncedAt  DateTime?     @map("last_synced_at") @db.Timestamptz(6)
-  syncStatus    SyncStatus    @default(synced) @map("sync_status")
-  syncDirection SyncDirection? @map("sync_direction")
-  syncError     String?       @map("sync_error") @db.Text
-
-  // Conflict Tracking
-  hasConflict  Boolean @default(false) @map("has_conflict")
-  conflictData Json?   @map("conflict_data")
-
-  // Soft Delete
-  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
-  deletedInSt Boolean   @default(false) @map("deleted_in_st")
-
-  // Additional Metadata
-  metadata Json @default("{}") @db.JsonB
-
-  // Foreign Key to local category
-  categoryUuid String?            @map("category_uuid") @db.Uuid
-  category     PricebookCategory? @relation(fields: [categoryUuid], references: [id], onDelete: SetNull)
-
-  @@map("pricebook_services")
-  @@index([stId])
-  @@index([tenantId])
-  @@index([categoryId])
-  @@index([categoryUuid])
-  @@index([code])
-  @@index([name])
-  @@index([syncStatus])
-  @@index([stModifiedOn])
-  @@index([price])
-}
-
-// ============================================
-// MODEL: PricebookEquipment
-// ============================================
-
-model PricebookEquipment {
-  id         String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  stId       BigInt  @unique @map("st_id")
-  tenantId   BigInt  @map("tenant_id")
-  categoryId BigInt? @map("category_id")
-
-  // Basic Info
-  code        String  @db.VarChar(100)
-  name        String  @db.VarChar(500)
-  description String? @db.Text
-  displayName String? @map("display_name") @db.VarChar(500)
-
-  // Product Details
-  manufacturer String? @db.VarChar(255)
-  modelNumber  String? @map("model_number") @db.VarChar(255)
-
-  // Pricing
-  cost        Decimal? @db.Decimal(18, 4)
-  price       Decimal? @db.Decimal(18, 4)
-  memberPrice Decimal? @map("member_price") @db.Decimal(18, 4)
-  addOnPrice  Decimal? @map("add_on_price") @db.Decimal(18, 4)
-
-  // Labor
-  recommendedHours Decimal? @map("recommended_hours") @db.Decimal(10, 4)
-
-  // Warranty
-  warrantyYears  Int? @map("warranty_years")
-  warrantyMonths Int? @map("warranty_months")
-
-  // Commission
-  commissionBonus Decimal? @map("commission_bonus") @db.Decimal(18, 4)
-  payType         String?  @map("pay_type") @db.VarChar(50)
-
-  // Flags
-  active  Boolean @default(true)
-  taxable Boolean @default(true)
-  account String? @db.VarChar(100)
-
-  // Assets
-  primaryVendorId BigInt? @map("primary_vendor_id")
-  images          Json    @default("[]") @db.JsonB
-  assets          Json    @default("[]") @db.JsonB
-
-  // Custom Fields & Tags
-  customFields Json @default("{}") @map("custom_fields") @db.JsonB
-  tags         Json @default("[]") @db.JsonB
-  externalData Json @default("{}") @map("external_data") @db.JsonB
-
-  // ServiceTitan Timestamps
-  stCreatedOn  DateTime? @map("st_created_on") @db.Timestamptz(6)
-  stModifiedOn DateTime? @map("st_modified_on") @db.Timestamptz(6)
-
-  // Local Timestamps
-  localCreatedAt  DateTime @default(now()) @map("local_created_at") @db.Timestamptz(6)
-  localModifiedAt DateTime @default(now()) @updatedAt @map("local_modified_at") @db.Timestamptz(6)
-
-  // Sync Metadata
-  lastSyncedAt  DateTime?     @map("last_synced_at") @db.Timestamptz(6)
-  syncStatus    SyncStatus    @default(synced) @map("sync_status")
-  syncDirection SyncDirection? @map("sync_direction")
-  syncError     String?       @map("sync_error") @db.Text
-
-  // Conflict Tracking
-  hasConflict  Boolean @default(false) @map("has_conflict")
-  conflictData Json?   @map("conflict_data")
-
-  // Soft Delete
-  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
-  deletedInSt Boolean   @default(false) @map("deleted_in_st")
-
-  // Additional Metadata
-  metadata Json @default("{}") @db.JsonB
-
-  // Foreign Key to local category
-  categoryUuid String?            @map("category_uuid") @db.Uuid
-  category     PricebookCategory? @relation(fields: [categoryUuid], references: [id], onDelete: SetNull)
-
-  @@map("pricebook_equipment")
-  @@index([stId])
-  @@index([tenantId])
-  @@index([categoryId])
-  @@index([categoryUuid])
-  @@index([code])
-  @@index([name])
-  @@index([manufacturer])
-  @@index([modelNumber])
-  @@index([syncStatus])
-  @@index([stModifiedOn])
-  @@index([price])
-}
-
-// ============================================
-// MODEL: PricebookSyncLog
-// ============================================
-
-model PricebookSyncLog {
-  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-
-  // Sync Configuration
-  syncType    String        @map("sync_type") @db.VarChar(50)
-  direction   SyncDirection
-  entityTypes EntityType[]  @default([category, material, service, equipment]) @map("entity_types")
-
-  // Timing
-  startedAt       DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
-  completedAt     DateTime? @map("completed_at") @db.Timestamptz(6)
-  durationSeconds Int?      @map("duration_seconds")
-
-  // Statistics
-  recordsFetched    Int @default(0) @map("records_fetched")
-  recordsCreated    Int @default(0) @map("records_created")
-  recordsUpdated    Int @default(0) @map("records_updated")
-  recordsDeleted    Int @default(0) @map("records_deleted")
-  recordsSkipped    Int @default(0) @map("records_skipped")
-  conflictsDetected Int @default(0) @map("conflicts_detected")
-  errorsEncountered Int @default(0) @map("errors_encountered")
-
-  // Status
-  status       SyncJobStatus @default(pending)
-  errorMessage String?       @map("error_message") @db.Text
-  errorStack   String?       @map("error_stack") @db.Text
-
-  // Metadata
-  triggeredBy     ChangeSource @map("triggered_by")
-  triggeredByUser String?      @map("triggered_by_user") @db.VarChar(255)
-  config          Json         @default("{}") @db.JsonB
-
-  // Detailed Results
-  results Json @default("{}") @db.JsonB
-
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  // Relations
-  conflicts PricebookSyncConflict[]
-  changes   PricebookChange[]
-
-  @@map("pricebook_sync_log")
-  @@index([status])
-  @@index([startedAt(sort: Desc)])
-  @@index([syncType])
-  @@index([direction])
-}
-
-// ============================================
-// MODEL: PricebookSyncConflict
-// ============================================
-
-model PricebookSyncConflict {
-  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-
-  // Entity Reference
-  entityType EntityType @map("entity_type")
-  entityId   String     @map("entity_id") @db.Uuid
-  stId       BigInt     @map("st_id")
-
-  // Conflict Details
-  conflictType ConflictType @map("conflict_type")
-
-  // Data Snapshots
-  stData    Json  @map("st_data") @db.JsonB
-  localData Json  @map("local_data") @db.JsonB
-  diff      Json? @db.JsonB
-
-  // Resolution
-  status             ConflictStatus @default(unresolved)
-  resolutionStrategy String?        @map("resolution_strategy") @db.VarChar(50)
-  resolvedData       Json?          @map("resolved_data") @db.JsonB
-  resolvedAt         DateTime?      @map("resolved_at") @db.Timestamptz(6)
-  resolvedBy         String?        @map("resolved_by") @db.VarChar(255)
-  resolutionNotes    String?        @map("resolution_notes") @db.Text
-
-  // Sync Reference
-  syncLogId String?           @map("sync_log_id") @db.Uuid
-  syncLog   PricebookSyncLog? @relation(fields: [syncLogId], references: [id], onDelete: SetNull)
-
-  // Timestamps
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-
-  @@map("pricebook_sync_conflicts")
-  @@index([entityType])
-  @@index([entityId])
-  @@index([stId])
-  @@index([status])
-  @@index([createdAt(sort: Desc)])
-  @@index([syncLogId])
-}
-
-// ============================================
-// MODEL: PricebookChange (Audit Log)
-// ============================================
-
-model PricebookChange {
-  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-
-  // Entity Reference
-  entityType EntityType @map("entity_type")
-  entityId   String     @map("entity_id") @db.Uuid
-  stId       BigInt?    @map("st_id")
-
-  // Change Details
-  action ChangeAction
-  source ChangeSource
-
-  // Data
-  changedFields Json? @map("changed_fields") @db.JsonB
-  oldValues     Json? @map("old_values") @db.JsonB
-  newValues     Json? @map("new_values") @db.JsonB
-  fullSnapshot  Json? @map("full_snapshot") @db.JsonB
-
-  // User/Context
-  userId    String? @map("user_id") @db.VarChar(255)
-  userName  String? @map("user_name") @db.VarChar(255)
-  sessionId String? @map("session_id") @db.VarChar(255)
-  requestId String? @map("request_id") @db.VarChar(255)
-
-  // Sync Reference
-  syncLogId String?           @map("sync_log_id") @db.Uuid
-  syncLog   PricebookSyncLog? @relation(fields: [syncLogId], references: [id], onDelete: SetNull)
-
-  // Timestamp
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  @@map("pricebook_changes")
-  @@index([entityType])
-  @@index([entityId])
-  @@index([stId])
-  @@index([action])
-  @@index([source])
-  @@index([createdAt(sort: Desc)])
-  @@index([userId])
-  @@index([syncLogId])
-}
-
-// ============================================
-// MODEL: WebhookSubscription
-// ============================================
-
-model WebhookSubscription {
-  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-
-  // Webhook Configuration
-  webhookUrl String   @map("webhook_url") @db.Text
-  events     String[]
-
-  // Authentication
-  secretKey String? @map("secret_key") @db.VarChar(255)
-  headers   Json    @default("{}") @db.JsonB
-
-  // Status
-  active          Boolean   @default(true)
-  lastTriggeredAt DateTime? @map("last_triggered_at") @db.Timestamptz(6)
-  lastStatusCode  Int?      @map("last_status_code")
-  lastError       String?   @map("last_error") @db.Text
-  failureCount    Int       @default(0) @map("failure_count")
-
-  // Metadata
-  name        String? @db.VarChar(255)
-  description String? @db.Text
-  createdBy   String? @map("created_by") @db.VarChar(255)
-
-  // Timestamps
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-
-  @@map("pricebook_webhook_subscriptions")
-  @@index([active])
-}
-
-// ============================================
-// MODEL: ChatSession
-// ============================================
-
-model ChatSession {
-  id        String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  sessionId String @unique @map("session_id") @db.VarChar(255)
-
-  // Context
-  lastCategoryId   String?            @map("last_category_id") @db.Uuid
-  lastCategoryStId BigInt?            @map("last_category_st_id")
-  lastCategoryName String?            @map("last_category_name") @db.VarChar(255)
-  lastCategory     PricebookCategory? @relation(fields: [lastCategoryId], references: [id], onDelete: SetNull)
-
-  // Pending Action
-  pendingAction Json? @map("pending_action") @db.JsonB
-
-  // History (last N messages)
-  history Json @default("[]") @db.JsonB
-
-  // User Info
-  userId   String? @map("user_id") @db.VarChar(255)
-  userName String? @map("user_name") @db.VarChar(255)
-
-  // Timestamps
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  expiresAt DateTime @default(dbgenerated("NOW() + INTERVAL '24 hours'")) @map("expires_at") @db.Timestamptz(6)
-
-  @@map("chat_sessions")
-  @@index([sessionId])
-  @@index([userId])
-  @@index([expiresAt])
-}
-
-// ============================================
-// GHL SYNC MODELS (Batch 10)
-// ============================================
-
-enum GhlSyncStatus {
+enum ghl_sync_status {
   pending
   synced
   failed
   skipped
   conflict
-
-  @@map("ghl_sync_status_enum")
 }
 
-// ============================================
-// MODEL: GhlContact
-// Maps ST customers to GHL contacts
-// ============================================
-
-model GhlContact {
-  id            String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  ghlId         String  @unique @map("ghl_id") @db.VarChar(255)
-  ghlLocationId String? @map("ghl_location_id") @db.VarChar(255)
-
-  // ServiceTitan Reference
-  stCustomerId BigInt? @map("st_customer_id")
-
-  // Contact Info
-  firstName    String? @map("first_name") @db.VarChar(255)
-  lastName     String? @map("last_name") @db.VarChar(255)
-  name         String? @db.VarChar(500)
-  email        String? @db.VarChar(255)
-  phone        String? @db.VarChar(50)
-  addressLine1 String? @map("address_line1") @db.VarChar(500)
-  city         String? @db.VarChar(255)
-  state        String? @db.VarChar(100)
-  zip          String? @db.VarChar(20)
-  country      String? @db.VarChar(100)
-
-  // Additional Data
-  phoneNumbers   Json @default("[]") @map("phone_numbers") @db.JsonB
-  emailAddresses Json @default("[]") @map("email_addresses") @db.JsonB
-  tags           Json @default("[]") @db.JsonB
-  customFields   Json @default("{}") @map("custom_fields") @db.JsonB
-
-  // Source & Type
-  source String? @db.VarChar(255)
-  type   String? @db.VarChar(50)
-
-  // Sync Metadata
-  syncStatus    String?   @default("synced") @map("sync_status") @db.VarChar(50)
-  syncAttempts  Int       @default(0) @map("sync_attempts")
-  lastSyncError String?   @map("last_sync_error") @db.Text
-  stDataHash    String?   @map("st_data_hash") @db.VarChar(64)
-  ghlDataHash   String?   @map("ghl_data_hash") @db.VarChar(64)
-  syncedToSt    Boolean   @default(false) @map("synced_to_st")
-  stSyncError   String?   @map("st_sync_error") @db.Text
-
-  // GHL Timestamps
-  ghlCreatedAt DateTime? @map("ghl_created_at") @db.Timestamptz(6)
-  ghlUpdatedAt DateTime? @map("ghl_updated_at") @db.Timestamptz(6)
-
-  // Local Timestamps
-  localSyncedAt DateTime @default(now()) @map("local_synced_at") @db.Timestamptz(6)
-
-  // Full API Response
-  fullData Json @map("full_data") @db.JsonB
-
-  @@map("ghl_contacts")
-  @@index([ghlId])
-  @@index([stCustomerId])
-  @@index([email])
-  @@index([phone])
-  @@index([syncedToSt])
+enum scheduling_action_type {
+  book
+  reschedule
+  cancel
+  recommend
+  availability_query
+  smart_match
 }
 
-// ============================================
-// MODEL: GhlOpportunity
-// Maps ST jobs/estimates to GHL opportunities
-// ============================================
-
-model GhlOpportunity {
-  id            String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  ghlId         String  @unique @map("ghl_id") @db.VarChar(255)
-  ghlLocationId String? @map("ghl_location_id") @db.VarChar(255)
-
-  // ServiceTitan Reference
-  stJobId      BigInt? @map("st_job_id")
-  stEstimateId BigInt? @map("st_estimate_id")
-  stCustomerId BigInt? @map("st_customer_id")
-
-  // GHL References
-  ghlContactId        String? @map("ghl_contact_id") @db.VarChar(255)
-  ghlPipelineId       String  @map("ghl_pipeline_id") @db.VarChar(255)
-  ghlPipelineStageId  String? @map("ghl_pipeline_stage_id") @db.VarChar(255)
-  pipelineName        String? @map("pipeline_name") @db.VarChar(255)
-  stageName           String? @map("stage_name") @db.VarChar(255)
-
-  // Opportunity Info
-  name          String   @db.VarChar(500)
-  monetaryValue Decimal? @map("monetary_value") @db.Decimal(18, 4)
-  status        String?  @db.VarChar(50)
-  source        String?  @db.VarChar(255)
-  leadValue     Decimal? @map("lead_value") @db.Decimal(18, 4)
-
-  // Assignment & Activity
-  assignedTo       String?   @map("assigned_to") @db.VarChar(255)
-  notesCount       Int       @default(0) @map("notes_count")
-  tasksCount       Int       @default(0) @map("tasks_count")
-  lastActivityAt   DateTime? @map("last_activity_at") @db.Timestamptz(6)
-
-  // Custom Fields
-  customFields Json @default("{}") @map("custom_fields") @db.JsonB
-
-  // Sync Metadata
-  syncStatus    String?   @default("synced") @map("sync_status") @db.VarChar(50)
-  syncAttempts  Int       @default(0) @map("sync_attempts")
-  lastSyncError String?   @map("last_sync_error") @db.Text
-  stDataHash    String?   @map("st_data_hash") @db.VarChar(64)
-  ghlDataHash   String?   @map("ghl_data_hash") @db.VarChar(64)
-  syncedToSt    Boolean   @default(false) @map("synced_to_st")
-  stSyncError   String?   @map("st_sync_error") @db.Text
-
-  // GHL Timestamps
-  ghlCreatedAt       DateTime? @map("ghl_created_at") @db.Timestamptz(6)
-  ghlUpdatedAt       DateTime? @map("ghl_updated_at") @db.Timestamptz(6)
-  closedAt           DateTime? @map("closed_at") @db.Timestamptz(6)
-  lastStatusChangeAt DateTime? @map("last_status_change_at") @db.Timestamptz(6)
-
-  // Local Timestamps
-  localSyncedAt  DateTime @default(now()) @map("local_synced_at") @db.Timestamptz(6)
-  localCreatedAt DateTime @default(now()) @map("local_created_at") @db.Timestamptz(6)
-  localUpdatedAt DateTime @default(now()) @updatedAt @map("local_updated_at") @db.Timestamptz(6)
-
-  // Full API Response
-  fullData Json @map("full_data") @db.JsonB
-
-  @@map("ghl_opportunities")
-  @@index([ghlId])
-  @@index([stJobId])
-  @@index([stEstimateId])
-  @@index([stCustomerId])
-  @@index([ghlContactId])
-  @@index([ghlPipelineId])
-  @@index([ghlPipelineStageId])
-  @@index([status])
-  @@index([ghlUpdatedAt(sort: Desc)])
-  @@index([syncedToSt])
+enum scheduling_entity_type {
+  technician
+  team
+  zone
+  business_hours
+  arrival_window
+  job_type
+  tag
 }
 
-// ============================================
-// MODEL: GhlPipelineMapping
-// Maps ST job types to GHL pipelines
-// ============================================
-
-model GhlPipelineMapping {
-  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-
-  // ServiceTitan Reference
-  stJobTypeId       BigInt? @map("st_job_type_id")
-  stJobTypeName     String? @map("st_job_type_name") @db.VarChar(255)
-  stBusinessUnitId  BigInt? @map("st_business_unit_id")
-  stBusinessUnitName String? @map("st_business_unit_name") @db.VarChar(255)
-
-  // GHL Reference
-  ghlPipelineId       String  @map("ghl_pipeline_id") @db.VarChar(255)
-  ghlPipelineName     String? @map("ghl_pipeline_name") @db.VarChar(255)
-  ghlDefaultStageId   String? @map("ghl_default_stage_id") @db.VarChar(255)
-  ghlDefaultStageName String? @map("ghl_default_stage_name") @db.VarChar(255)
-  ghlLocationId       String  @map("ghl_location_id") @db.VarChar(255)
-
-  // Mapping Rules
-  isDefault Boolean @default(false) @map("is_default")
-  priority  Int     @default(0)
-
-  // Timestamps
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-
-  @@unique([stJobTypeId, stBusinessUnitId, ghlLocationId], name: "uq_ghl_pipeline_mapping")
-  @@map("ghl_pipeline_mapping")
-  @@index([stJobTypeId])
-  @@index([stBusinessUnitId])
-  @@index([isDefault])
+enum scheduling_rule_type {
+  constraint
+  preference
+  optimization
 }
 
-// ============================================
-// MODEL: GhlSyncLog
-// Audit log for GHL sync operations
-// ============================================
-
-model GhlSyncLog {
-  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-
-  // Sync Info
-  syncType  String @map("sync_type") @db.VarChar(50)
-  direction String @db.VarChar(20)
-
-  // Status
-  status String @db.VarChar(50)
-
-  // Statistics
-  recordsFetched Int @default(0) @map("records_fetched")
-  recordsCreated Int @default(0) @map("records_created")
-  recordsUpdated Int @default(0) @map("records_updated")
-  recordsFailed  Int @default(0) @map("records_failed")
-
-  // Timing
-  startedAt   DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
-  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
-  durationMs  Int?      @map("duration_ms")
-
-  // Error Details
-  errorMessage String? @map("error_message") @db.Text
-  errorDetails Json?   @map("error_details") @db.JsonB
-
-  // Metadata
-  triggeredBy String? @map("triggered_by") @db.VarChar(100)
-
-  @@map("ghl_sync_log")
-  @@index([syncType])
-  @@index([status])
-  @@index([startedAt(sort: Desc)])
+enum skill_level {
+  basic
+  intermediate
+  advanced
+  expert
 }
-
-// ============================================
-// MODEL: GhlWebhookEvent
-// Incoming webhooks from GHL
-// ============================================
-
-model GhlWebhookEvent {
-  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-
-  // Event Info
-  eventType     String  @map("event_type") @db.VarChar(100)
-  ghlLocationId String? @map("ghl_location_id") @db.VarChar(255)
-
-  // Payload
-  payload Json  @db.JsonB
-  headers Json? @db.JsonB
-
-  // Processing
-  processed       Boolean   @default(false)
-  processedAt     DateTime? @map("processed_at") @db.Timestamptz(6)
-  processingError String?   @map("processing_error") @db.Text
-
-  // Timestamps
-  receivedAt DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
-
-  @@map("ghl_webhook_events")
-  @@index([eventType])
-  @@index([processed])
-  @@index([receivedAt(sort: Desc)])
-}
-

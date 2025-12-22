@@ -53,6 +53,15 @@ export const config = {
     url: env.DATABASE_URL,
     maxConnections: env.DATABASE_MAX_CONNECTIONS,
   },
+
+  // AWS S3 configuration (for pricebook images)
+  aws: {
+    accessKeyId: env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
+    region: env.AWS_REGION || 'us-east-1',
+    s3Bucket: env.AWS_S3_BUCKET,
+    cloudfrontDomain: env.AWS_CLOUDFRONT_DOMAIN,
+  },
 };
 
 export default config;

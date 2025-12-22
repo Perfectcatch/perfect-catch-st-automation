@@ -108,7 +108,7 @@ Return JSON array of variations.`,
         if (!category || category === 'equipment') {
           const equipResult = await client.query(`
             SELECT st_id as id, code as sku, name, description, cost, price, 'equipment' as category
-            FROM pricebook.pricebook_equipment
+            FROM raw_st_pricebook_equipment
             WHERE active = true AND (LOWER(name) LIKE $1 OR LOWER(code) LIKE $1 OR LOWER(description) LIKE $1)
             LIMIT 5
           `, [`%${lowerQuery}%`]);
@@ -119,7 +119,7 @@ Return JSON array of variations.`,
         if (!category || category === 'material') {
           const matResult = await client.query(`
             SELECT st_id as id, code as sku, name, description, cost, price, 'material' as category
-            FROM pricebook.pricebook_materials
+            FROM raw_st_pricebook_materials
             WHERE active = true AND (LOWER(name) LIKE $1 OR LOWER(code) LIKE $1 OR LOWER(description) LIKE $1)
             LIMIT 5
           `, [`%${lowerQuery}%`]);
@@ -130,7 +130,7 @@ Return JSON array of variations.`,
         if (!category || category === 'labor' || category === 'service') {
           const svcResult = await client.query(`
             SELECT st_id as id, code as sku, name, description, price, 'service' as category
-            FROM pricebook.pricebook_services
+            FROM raw_st_pricebook_services
             WHERE active = true AND (LOWER(name) LIKE $1 OR LOWER(code) LIKE $1 OR LOWER(description) LIKE $1)
             LIMIT 5
           `, [`%${lowerQuery}%`]);
@@ -220,10 +220,10 @@ Return JSON array of item IDs in ranked order.`,
     try {
       let table;
       switch (category) {
-        case 'equipment': table = 'pricebook.pricebook_equipment'; break;
-        case 'material': table = 'pricebook.pricebook_materials'; break;
-        case 'service': table = 'pricebook.pricebook_services'; break;
-        default: table = 'pricebook.pricebook_equipment';
+        case 'equipment': table = 'raw_st_pricebook_equipment'; break;
+        case 'material': table = 'raw_st_pricebook_materials'; break;
+        case 'service': table = 'raw_st_pricebook_services'; break;
+        default: table = 'raw_st_pricebook_equipment';
       }
 
       const result = await client.query(`
@@ -245,9 +245,9 @@ Return JSON array of item IDs in ranked order.`,
     try {
       let table;
       switch (category) {
-        case 'equipment': table = 'pricebook.pricebook_equipment'; break;
-        case 'material': table = 'pricebook.pricebook_materials'; break;
-        case 'service': table = 'pricebook.pricebook_services'; break;
+        case 'equipment': table = 'raw_st_pricebook_equipment'; break;
+        case 'material': table = 'raw_st_pricebook_materials'; break;
+        case 'service': table = 'raw_st_pricebook_services'; break;
         default: return [];
       }
 

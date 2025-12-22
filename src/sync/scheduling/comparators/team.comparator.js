@@ -29,7 +29,7 @@ export class TeamComparator {
 
     // Get all local teams
     const localResult = await db.query(
-      'SELECT * FROM scheduling_teams'
+      'SELECT * FROM raw_st_teams'
     );
     const localTeams = localResult.rows;
 

@@ -25,7 +25,7 @@ export class ZoneApplier {
     const data = this.mapStToLocal(stZone);
 
     const result = await db.query(
-      `INSERT INTO scheduling_zones (
+      `INSERT INTO raw_st_zones (
         st_id, tenant_id, name, active, center_lat, center_lng,
         st_created_on, st_modified_on, last_synced_at, sync_status, metadata
       ) VALUES (
@@ -61,7 +61,7 @@ export class ZoneApplier {
     const data = this.mapStToLocal(stZone);
 
     const result = await db.query(
-      `UPDATE scheduling_zones SET
+      `UPDATE raw_st_zones SET
         name = $1,
         active = $2,
         st_modified_on = $3,
@@ -91,7 +91,7 @@ export class ZoneApplier {
    */
   async delete(localId, syncLogId) {
     const result = await db.query(
-      `UPDATE scheduling_zones SET
+      `UPDATE raw_st_zones SET
         active = false,
         sync_status = 'synced',
         last_synced_at = NOW()

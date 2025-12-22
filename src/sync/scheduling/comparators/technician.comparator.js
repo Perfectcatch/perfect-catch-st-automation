@@ -29,7 +29,7 @@ export class TechnicianComparator {
 
     // Get all local technicians
     const localResult = await db.query(
-      'SELECT * FROM scheduling_technicians WHERE deleted_at IS NULL'
+      'SELECT * FROM raw_st_technicians WHERE active = true'
     );
     const localTechnicians = localResult.rows;
 

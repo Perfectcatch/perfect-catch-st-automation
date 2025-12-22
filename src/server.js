@@ -11,6 +11,10 @@ import { logger } from './lib/logger.js';
 let startGHLSyncScheduler = null;
 let stopGHLSyncScheduler = null;
 
+// CRM Sync Scheduler - loaded dynamically to prevent startup failures
+let startCRMSyncScheduler = null;
+let stopCRMSyncScheduler = null;
+
 const PORT = config.port;
 
 // Start server
@@ -47,6 +51,23 @@ const server = app.listen(PORT, () => {
   } else {
     logger.info('GHL Sync Scheduler disabled (GHL_SYNC_ENABLED=false)');
   }
+
+  // Start CRM Sync Scheduler (every 5 minutes)
+  if (process.env.CRM_SYNC_ENABLED === 'true') {
+    (async () => {
+      try {
+        const crmSync = await import('./sync/crm/index.js');
+        startCRMSyncScheduler = crmSync.startCRMSyncScheduler;
+        stopCRMSyncScheduler = crmSync.stopCRMSyncScheduler;
+        startCRMSyncScheduler();
+        logger.info('CRM Sync Scheduler started (every 5 minutes)');
+      } catch (error) {
+        logger.error({ error: error.message }, 'Failed to start CRM Sync Scheduler');
+      }
+    })();
+  } else {
+    logger.info('CRM Sync Scheduler disabled (CRM_SYNC_ENABLED!=true)');
+  }
 });
 
 // Graceful shutdown handling
@@ -60,6 +81,16 @@ function gracefulShutdown(signal) {
       logger.info('GHL Sync Scheduler stopped');
     } catch (error) {
       logger.error({ error: error.message }, 'Error stopping GHL Sync Scheduler');
+    }
+  }
+
+  // Stop CRM Sync Scheduler
+  if (stopCRMSyncScheduler) {
+    try {
+      stopCRMSyncScheduler();
+      logger.info('CRM Sync Scheduler stopped');
+    } catch (error) {
+      logger.error({ error: error.message }, 'Error stopping CRM Sync Scheduler');
     }
   }
 

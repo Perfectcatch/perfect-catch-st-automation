@@ -88,13 +88,13 @@ export const updateEquipmentPrice = {
       let equipment;
       if (params.stId) {
         const result = await client.query(
-          'SELECT * FROM pricebook.pricebook_equipment WHERE st_id = $1',
+          'SELECT * FROM raw_st_pricebook_equipment WHERE st_id = $1',
           [params.stId]
         );
         equipment = result.rows[0];
       } else if (params.sku) {
         const result = await client.query(
-          'SELECT * FROM pricebook.pricebook_equipment WHERE code = $1',
+          'SELECT * FROM raw_st_pricebook_equipment WHERE code = $1',
           [params.sku]
         );
         equipment = result.rows[0];
@@ -126,7 +126,7 @@ export const updateEquipmentPrice = {
 
       // Update local database
       await client.query(`
-        UPDATE pricebook.pricebook_equipment
+        UPDATE raw_st_pricebook_equipment
         SET price = $1,
             cost = COALESCE($2, cost),
             member_price = COALESCE($3, member_price),
@@ -178,13 +178,13 @@ export const updateMaterialPrice = {
       let material;
       if (params.stId) {
         const result = await client.query(
-          'SELECT * FROM pricebook.pricebook_materials WHERE st_id = $1',
+          'SELECT * FROM raw_st_pricebook_materials WHERE st_id = $1',
           [params.stId]
         );
         material = result.rows[0];
       } else if (params.sku) {
         const result = await client.query(
-          'SELECT * FROM pricebook.pricebook_materials WHERE code = $1',
+          'SELECT * FROM raw_st_pricebook_materials WHERE code = $1',
           [params.sku]
         );
         material = result.rows[0];
@@ -211,7 +211,7 @@ export const updateMaterialPrice = {
       }
 
       await client.query(`
-        UPDATE pricebook.pricebook_materials
+        UPDATE raw_st_pricebook_materials
         SET price = $1,
             cost = COALESCE($2, cost),
             member_price = COALESCE($3, member_price),
@@ -261,13 +261,13 @@ export const updateServicePrice = {
       let service;
       if (params.stId) {
         const result = await client.query(
-          'SELECT * FROM pricebook.pricebook_services WHERE st_id = $1',
+          'SELECT * FROM raw_st_pricebook_services WHERE st_id = $1',
           [params.stId]
         );
         service = result.rows[0];
       } else if (params.sku) {
         const result = await client.query(
-          'SELECT * FROM pricebook.pricebook_services WHERE code = $1',
+          'SELECT * FROM raw_st_pricebook_services WHERE code = $1',
           [params.sku]
         );
         service = result.rows[0];
@@ -294,7 +294,7 @@ export const updateServicePrice = {
       }
 
       await client.query(`
-        UPDATE pricebook.pricebook_services
+        UPDATE raw_st_pricebook_services
         SET price = $1,
             member_price = COALESCE($2, member_price),
             duration_hours = COALESCE($3, duration_hours),
@@ -343,9 +343,9 @@ export const bulkUpdatePrices = {
 
     try {
       const table = {
-        equipment: 'pricebook.pricebook_equipment',
-        material: 'pricebook.pricebook_materials',
-        service: 'pricebook.pricebook_services',
+        equipment: 'raw_st_pricebook_equipment',
+        material: 'raw_st_pricebook_materials',
+        service: 'raw_st_pricebook_services',
       }[params.type];
 
       const stEndpoint = {
@@ -457,9 +457,9 @@ export const getItemPricing = {
       const tables = params.type
         ? [{ name: params.type, table: `pricebook.pricebook_${params.type === 'material' ? 'materials' : params.type === 'service' ? 'services' : 'equipment'}` }]
         : [
-            { name: 'equipment', table: 'pricebook.pricebook_equipment' },
-            { name: 'material', table: 'pricebook.pricebook_materials' },
-            { name: 'service', table: 'pricebook.pricebook_services' },
+            { name: 'equipment', table: 'raw_st_pricebook_equipment' },
+            { name: 'material', table: 'raw_st_pricebook_materials' },
+            { name: 'service', table: 'raw_st_pricebook_services' },
           ];
 
       for (const { name, table } of tables) {

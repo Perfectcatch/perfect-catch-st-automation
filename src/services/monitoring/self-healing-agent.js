@@ -280,7 +280,7 @@ What's the likely cause and recommended action?`
       const [recentSyncs, entityCounts] = await Promise.all([
         client.query(`
           SELECT sync_type, status, error_message, started_at
-          FROM pricebook_sync_log
+          FROM raw_sync_state
           ORDER BY started_at DESC
           LIMIT 5
         `),
@@ -288,8 +288,8 @@ What's the likely cause and recommended action?`
           SELECT
             (SELECT COUNT(*) FROM customers) as customers,
             (SELECT COUNT(*) FROM jobs) as jobs,
-            (SELECT COUNT(*) FROM pricebook_services) as services,
-            (SELECT COUNT(*) FROM scheduling_technicians) as technicians
+            (SELECT COUNT(*) FROM raw_st_pricebook_services) as services,
+            (SELECT COUNT(*) FROM raw_st_technicians) as technicians
         `)
       ]);
 

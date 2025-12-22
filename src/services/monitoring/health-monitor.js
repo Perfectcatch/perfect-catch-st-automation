@@ -64,8 +64,8 @@ export class HealthMonitor {
         SELECT
           (SELECT COUNT(*) FROM customers) as customers,
           (SELECT COUNT(*) FROM jobs) as jobs,
-          (SELECT COUNT(*) FROM pricebook_services) as services,
-          (SELECT COUNT(*) FROM scheduling_technicians) as technicians
+          (SELECT COUNT(*) FROM raw_st_pricebook_services) as services,
+          (SELECT COUNT(*) FROM raw_st_technicians) as technicians
       `);
       
       return {
@@ -90,7 +90,7 @@ export class HealthMonitor {
     const client = await getPool().connect();
     try {
       const lastSyncResult = await client.query(`
-        SELECT * FROM pricebook_sync_log
+        SELECT * FROM raw_sync_state
         ORDER BY started_at DESC
         LIMIT 1
       `);
@@ -176,7 +176,7 @@ export class HealthMonitor {
     try {
       // Check if workers are running by looking at recent activity
       const recentSyncsResult = await client.query(`
-        SELECT COUNT(*) as count FROM pricebook_sync_log
+        SELECT COUNT(*) as count FROM raw_sync_state
         WHERE started_at >= NOW() - INTERVAL '6 hours'
       `);
       
@@ -199,12 +199,12 @@ export class HealthMonitor {
     try {
       // Check pricebook sync health
       const pricebookResult = await client.query(`
-        SELECT COUNT(*) as count FROM pricebook_services
+        SELECT COUNT(*) as count FROM raw_st_pricebook_services
       `);
 
       // Check scheduling data
       const schedulingResult = await client.query(`
-        SELECT COUNT(*) as count FROM scheduling_technicians
+        SELECT COUNT(*) as count FROM raw_st_technicians
       `);
 
       const pricebookServices = Number(pricebookResult.rows[0].count);

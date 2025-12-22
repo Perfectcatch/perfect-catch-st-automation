@@ -133,12 +133,26 @@ export class EquipmentApplier {
    * @returns {Object}
    */
   mapStToLocal(stEquipment) {
+    // Extract default image URL from assets
+    const defaultAsset = stEquipment.assets?.find(a => a.isDefault) || stEquipment.assets?.[0];
+    const defaultImageUrl = defaultAsset?.url 
+      ? `https://api.servicetitan.io/${defaultAsset.url}`
+      : stEquipment.defaultAssetUrl 
+        ? `https://api.servicetitan.io/${stEquipment.defaultAssetUrl}`
+        : null;
+
+    // Process assets to include full URLs
+    const processedAssets = (stEquipment.assets || []).map(asset => ({
+      ...asset,
+      fullUrl: asset.url ? `https://api.servicetitan.io/${asset.url}` : null,
+    }));
+
     return {
       stId: BigInt(stEquipment.id),
       tenantId: BigInt(this.tenantId),
       categoryId: stEquipment.categoryId ? BigInt(stEquipment.categoryId) : null,
       code: stEquipment.code || '',
-      name: stEquipment.name || '',
+      name: stEquipment.name || stEquipment.displayName || '',
       description: stEquipment.description || null,
       displayName: stEquipment.displayName || null,
       manufacturer: stEquipment.manufacturer || null,
@@ -155,9 +169,14 @@ export class EquipmentApplier {
       active: stEquipment.active ?? true,
       taxable: stEquipment.taxable ?? true,
       account: stEquipment.account || null,
-      primaryVendorId: stEquipment.primaryVendorId ? BigInt(stEquipment.primaryVendorId) : null,
-      images: stEquipment.images || [],
-      assets: stEquipment.assets || [],
+      primaryVendorId: stEquipment.primaryVendor?.vendorId ? BigInt(stEquipment.primaryVendor.vendorId) : null,
+      // New fields (snake_case for Prisma)
+      primary_vendor: stEquipment.primaryVendor || {},
+      other_vendors: stEquipment.otherVendors || [],
+      category_ids: stEquipment.categories || [],
+      default_image_url: defaultImageUrl,
+      images: processedAssets.filter(a => a.type === 'Image'),
+      assets: processedAssets,
       customFields: stEquipment.customFields || {},
       tags: stEquipment.tags || [],
       externalData: stEquipment.externalData || {},

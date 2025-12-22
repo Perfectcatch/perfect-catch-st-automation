@@ -8,12 +8,20 @@ import { Router } from 'express';
 import { getAccessToken } from '../services/tokenManager.js';
 import fs from 'fs/promises';
 import path from 'path';
+import pg from 'pg';
+import config from '../config/index.js';
 
 const router = Router();
 
 // ServiceTitan tenant ID from environment
 const TENANT_ID = process.env.SERVICE_TITAN_TENANT_ID || '3222348440';
 const IMAGE_STORAGE_PATH = process.env.IMAGE_STORAGE_PATH || '/app/public/images';
+
+// Database pool for serving images
+const pool = new pg.Pool({
+  connectionString: config.database.url,
+  max: 5,
+});
 
 // Cache for images (in production, use Redis or file system)
 const imageCache = new Map();
@@ -171,15 +179,122 @@ router.get('/local/*', async (req, res) => {
 });
 
 /**
+ * GET /images/db/:type/:id
+ * Serve images stored in PostgreSQL
+ * Example: /images/db/services/12345
+ *          /images/db/materials/67890
+ *          /images/db/equipment/11111
+ *          /images/db/categories/22222
+ */
+router.get('/db/:type/:id', async (req, res) => {
+  try {
+    const { type, id } = req.params;
+
+    // Map type to table name
+    const tableMap = {
+      services: 'raw_st_pricebook_services',
+      materials: 'raw_st_pricebook_materials',
+      equipment: 'raw_st_pricebook_equipment',
+      categories: 'raw_st_pricebook_categories',
+    };
+
+    const tableName = tableMap[type];
+    if (!tableName) {
+      return res.status(400).json({ error: 'Invalid type. Use: services, materials, equipment, categories' });
+    }
+
+    // Check memory cache first
+    const cacheKey = `db:${type}:${id}`;
+    const cached = imageCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      res.set('Content-Type', cached.contentType);
+      res.set('Cache-Control', 'public, max-age=86400');
+      res.set('X-Cache', 'HIT');
+      res.set('X-Source', 'database');
+      return res.send(cached.data);
+    }
+
+    // Query database for image
+    const result = await pool.query(
+      `SELECT image_data, image_content_type FROM ${tableName} WHERE st_id = $1`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Item not found', type, id });
+    }
+
+    const { image_data, image_content_type } = result.rows[0];
+
+    if (!image_data) {
+      return res.status(404).json({ error: 'Image not downloaded yet', type, id });
+    }
+
+    // Default to image/jpeg if content type is missing or generic
+    const contentType = (image_content_type && image_content_type !== 'application/octet-stream') 
+      ? image_content_type 
+      : 'image/jpeg';
+
+    // Cache the image
+    imageCache.set(cacheKey, {
+      data: image_data,
+      contentType,
+      timestamp: Date.now(),
+    });
+
+    // Limit cache size
+    if (imageCache.size > 500) {
+      const firstKey = imageCache.keys().next().value;
+      imageCache.delete(firstKey);
+    }
+
+    res.set('Content-Type', contentType);
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.set('X-Cache', 'MISS');
+    res.set('X-Source', 'database');
+    res.send(image_data);
+
+  } catch (error) {
+    console.error('Database image error:', error.message);
+    res.status(500).json({ error: 'Failed to fetch image', message: error.message });
+  }
+});
+
+/**
  * GET /images/info
  * Get cache statistics
  */
-router.get('/info', (req, res) => {
+router.get('/info', async (req, res) => {
+  // Get image stats from database
+  let dbStats = {};
+  try {
+    const statsResult = await pool.query(`
+      SELECT
+        'services' as type,
+        COUNT(*) FILTER (WHERE image_data IS NOT NULL) as with_images,
+        COUNT(*) as total
+      FROM raw_st_pricebook_services
+      UNION ALL
+      SELECT 'materials', COUNT(*) FILTER (WHERE image_data IS NOT NULL), COUNT(*)
+      FROM raw_st_pricebook_materials
+      UNION ALL
+      SELECT 'equipment', COUNT(*) FILTER (WHERE image_data IS NOT NULL), COUNT(*)
+      FROM raw_st_pricebook_equipment
+      UNION ALL
+      SELECT 'categories', COUNT(*) FILTER (WHERE image_data IS NOT NULL), COUNT(*)
+      FROM raw_st_pricebook_categories
+    `);
+    dbStats = statsResult.rows;
+  } catch (err) {
+    dbStats = { error: err.message };
+  }
+
   res.json({
     cacheSize: imageCache.size,
     cacheTTL: CACHE_TTL,
     tenantId: TENANT_ID,
     storagePath: IMAGE_STORAGE_PATH,
+    databaseImages: dbStats,
   });
 });
 

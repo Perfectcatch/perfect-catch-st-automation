@@ -62,6 +62,9 @@ import schedulingRoutes from './scheduling.routes.js';
 // GHL integration routes (pipeline management, sync status)
 import ghlRoutes from './ghl.routes.js';
 
+// CRM integration routes (Perfect Catch CRM pipeline sync)
+import crmRoutes from './crm.routes.js';
+
 // Monitoring routes (real-time sync monitoring dashboard)
 import monitorRoutes from './monitor.routes.js';
 
@@ -143,6 +146,11 @@ router.use('/scheduling', schedulingRoutes);
 // GHL INTEGRATION ROUTES (pipeline management, sync, Install Pipeline)
 // ═══════════════════════════════════════════════════════════════
 router.use('/ghl', ghlRoutes);
+
+// ═══════════════════════════════════════════════════════════════
+// CRM INTEGRATION ROUTES (Perfect Catch CRM pipeline sync)
+// ═══════════════════════════════════════════════════════════════
+router.use('/crm', crmRoutes);
 
 // ═══════════════════════════════════════════════════════════════
 // MONITORING ROUTES (real-time sync monitoring with SSE)

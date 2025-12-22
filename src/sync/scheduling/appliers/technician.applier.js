@@ -25,7 +25,7 @@ export class TechnicianApplier {
     const data = this.mapStToLocal(stTechnician);
 
     const result = await db.query(
-      `INSERT INTO scheduling_technicians (
+      `INSERT INTO raw_st_technicians (
         st_id, tenant_id, name, email, phone, team_id, team_name,
         zone_ids, role, employee_type, hourly_rate, active,
         st_created_on, st_modified_on, last_synced_at, sync_status, metadata
@@ -68,7 +68,7 @@ export class TechnicianApplier {
     const data = this.mapStToLocal(stTechnician);
 
     const result = await db.query(
-      `UPDATE scheduling_technicians SET
+      `UPDATE raw_st_technicians SET
         name = $1,
         email = $2,
         phone = $3,
@@ -114,7 +114,7 @@ export class TechnicianApplier {
    */
   async delete(localId, syncLogId) {
     const result = await db.query(
-      `UPDATE scheduling_technicians SET
+      `UPDATE raw_st_technicians SET
         deleted_at = NOW(),
         deleted_in_st = true,
         sync_status = 'synced',

@@ -1,5 +1,14 @@
 # Perfect Catch ST Automation - Documentation Index
 
+## Recent Updates
+
+| Date | Document | Description |
+|------|----------|-------------|
+| Dec 2024 | [CHANGELOG_DEC_2024.md](./CHANGELOG_DEC_2024.md) | CRM Pipeline Sync, Salesforce integration |
+| Dec 2024 | [CRM_PIPELINE_SYNC.md](./integrations/CRM_PIPELINE_SYNC.md) | Complete CRM sync implementation |
+
+---
+
 ## Quick Navigation
 
 | Section | Description |
@@ -7,7 +16,7 @@
 | [Architecture](./architecture/) | System design, data flows, component interactions |
 | [Deployment](./deployment/) | Deployment status, gaps, recommendations |
 | [Development](./development/) | Developer guides, sync engine, chat agent |
-| [Integrations](./integrations/) | n8n, Dashboard, GHL integration guides |
+| [Integrations](./integrations/) | n8n, Dashboard, GHL, CRM, Salesforce |
 | [API Reference](./api/) | ServiceTitan OpenAPI specs and endpoint maps |
 | [Archive](./archive/) | Historical batch specs and prompts |
 
@@ -45,6 +54,17 @@
 ---
 
 ## Integrations
+
+### CRM Pipeline Sync (NEW - Dec 2024)
+| Document | Description |
+|----------|-------------|
+| [CRM_PIPELINE_SYNC.md](./integrations/CRM_PIPELINE_SYNC.md) | Complete CRM sync implementation guide |
+
+### Salesforce
+| Document | Description |
+|----------|-------------|
+| [Salesforce/INTEGRATION_COMPLETE.md](./integrations/Salesforce/INTEGRATION_COMPLETE.md) | Salesforce integration status |
+| [Salesforce/SALESFORCE_DEPLOYMENT_GUIDE.md](./integrations/Salesforce/SALESFORCE_DEPLOYMENT_GUIDE.md) | Deployment instructions |
 
 ### n8n Workflows
 | Document | Description |

@@ -40,9 +40,17 @@ const ALLOWED_TABLES = [
   'callrail_calls', 'callrail_conversion_log',
   // Messaging tables
   'messaging_log', 'messaging_templates',
-  // Pricebook tables
-  'pricebook_services', 'pricebook_materials', 'pricebook_equipment',
-  'pricebook_categories', 'pricebook_sync_log',
+  // Raw ServiceTitan tables
+  'raw_st_customers', 'raw_st_locations', 'raw_st_customer_contacts', 'raw_st_location_contacts',
+  'raw_st_jobs', 'raw_st_appointments', 'raw_st_invoices', 'raw_st_payments',
+  'raw_st_technicians', 'raw_st_employees', 'raw_st_business_units',
+  'raw_st_job_types', 'raw_st_tag_types', 'raw_st_campaigns', 'raw_st_estimates',
+  'raw_st_installed_equipment', 'raw_st_teams', 'raw_st_zones', 'raw_st_appointment_assignments',
+  // Raw Pricebook tables
+  'raw_st_pricebook_services', 'raw_st_pricebook_materials', 'raw_st_pricebook_equipment',
+  'raw_st_pricebook_categories',
+  // Sync state
+  'raw_sync_state',
   // Views
   'v_active_jobs', 'v_open_estimates', 'v_outstanding_invoices',
   'v_active_workflows', 'v_workflow_performance', 'v_pending_workflow_actions',
@@ -148,10 +156,11 @@ export async function listTables() {
     tables: ALLOWED_TABLES,
     categories: {
       servicetitan: ALLOWED_TABLES.filter(t => t.startsWith('st_')),
+      raw_servicetitan: ALLOWED_TABLES.filter(t => t.startsWith('raw_st_') && !t.includes('pricebook')),
+      raw_pricebook: ALLOWED_TABLES.filter(t => t.startsWith('raw_st_pricebook_')),
       workflow: ALLOWED_TABLES.filter(t => t.startsWith('workflow_') || t === 'customer_communication_preferences'),
       callrail: ALLOWED_TABLES.filter(t => t.startsWith('callrail_')),
       messaging: ALLOWED_TABLES.filter(t => t.startsWith('messaging_')),
-      pricebook: ALLOWED_TABLES.filter(t => t.startsWith('pricebook_')),
       views: ALLOWED_TABLES.filter(t => t.startsWith('v_')),
     },
   };

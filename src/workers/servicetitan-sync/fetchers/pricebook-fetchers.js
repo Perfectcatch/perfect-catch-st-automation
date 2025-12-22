@@ -22,6 +22,25 @@ export class PricebookMaterialsFetcher extends BaseFetcher {
     });
   }
 
+  /**
+   * Override fullSync to fetch both active AND inactive items
+   * ServiceTitan API filters to active=true by default
+   */
+  async fullSync(queryParams = {}) {
+    // Fetch active items
+    const activeResult = await super.fullSync({ ...queryParams, active: 'true' });
+
+    // Fetch inactive items
+    const inactiveResult = await super.fullSync({ ...queryParams, active: 'false' });
+
+    return {
+      success: true,
+      active: activeResult,
+      inactive: inactiveResult,
+      totalRecords: (activeResult.records || 0) + (inactiveResult.records || 0),
+    };
+  }
+
   getColumns() {
     return [
       'st_id',
@@ -95,6 +114,25 @@ export class PricebookServicesFetcher extends BaseFetcher {
     });
   }
 
+  /**
+   * Override fullSync to fetch both active AND inactive items
+   * ServiceTitan API filters to active=true by default
+   */
+  async fullSync(queryParams = {}) {
+    // Fetch active items
+    const activeResult = await super.fullSync({ ...queryParams, active: 'true' });
+
+    // Fetch inactive items
+    const inactiveResult = await super.fullSync({ ...queryParams, active: 'false' });
+
+    return {
+      success: true,
+      active: activeResult,
+      inactive: inactiveResult,
+      totalRecords: (activeResult.records || 0) + (inactiveResult.records || 0),
+    };
+  }
+
   getColumns() {
     return [
       'st_id',
@@ -164,6 +202,25 @@ export class PricebookEquipmentFetcher extends BaseFetcher {
       tableName: 'raw_st_pricebook_equipment',
       endpoint: '/pricebook/v2/tenant/{tenant}/equipment',
     });
+  }
+
+  /**
+   * Override fullSync to fetch both active AND inactive items
+   * ServiceTitan API filters to active=true by default
+   */
+  async fullSync(queryParams = {}) {
+    // Fetch active items
+    const activeResult = await super.fullSync({ ...queryParams, active: 'true' });
+
+    // Fetch inactive items
+    const inactiveResult = await super.fullSync({ ...queryParams, active: 'false' });
+
+    return {
+      success: true,
+      active: activeResult,
+      inactive: inactiveResult,
+      totalRecords: (activeResult.records || 0) + (inactiveResult.records || 0),
+    };
   }
 
   getColumns() {
@@ -237,6 +294,25 @@ export class PricebookCategoriesFetcher extends BaseFetcher {
       tableName: 'raw_st_pricebook_categories',
       endpoint: '/pricebook/v2/tenant/{tenant}/categories',
     });
+  }
+
+  /**
+   * Override fullSync to fetch both active AND inactive items
+   * ServiceTitan API filters to active=true by default
+   */
+  async fullSync(queryParams = {}) {
+    // Fetch active items
+    const activeResult = await super.fullSync({ ...queryParams, active: 'true' });
+
+    // Fetch inactive items
+    const inactiveResult = await super.fullSync({ ...queryParams, active: 'false' });
+
+    return {
+      success: true,
+      active: activeResult,
+      inactive: inactiveResult,
+      totalRecords: (activeResult.records || 0) + (inactiveResult.records || 0),
+    };
   }
 
   getColumns() {
