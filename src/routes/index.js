@@ -68,6 +68,9 @@ import crmRoutes from './crm.routes.js';
 // Monitoring routes (real-time sync monitoring dashboard)
 import monitorRoutes from './monitor.routes.js';
 
+// Worker management routes (run/status/enable/disable workers)
+import workersRoutes from './workers.routes.js';
+
 const router = Router();
 
 // ═══════════════════════════════════════════════════════════════
@@ -156,5 +159,10 @@ router.use('/crm', crmRoutes);
 // MONITORING ROUTES (real-time sync monitoring with SSE)
 // ═══════════════════════════════════════════════════════════════
 router.use('/api/monitor', monitorRoutes);
+
+// ═══════════════════════════════════════════════════════════════
+// WORKER MANAGEMENT ROUTES (run workers, check status, enable/disable)
+// ═══════════════════════════════════════════════════════════════
+router.use('/api/workers', workersRoutes);
 
 export default router;

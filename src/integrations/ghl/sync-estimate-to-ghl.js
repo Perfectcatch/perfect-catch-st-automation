@@ -16,6 +16,7 @@ import axios from 'axios';
 import config from '../../config/index.js';
 import { createLogger } from '../../lib/logger.js';
 import { getPool } from '../../services/sync/sync-base.js';
+import { GHL_CUSTOM_FIELDS, buildOpportunityCustomFields } from '../../config/ghl-pipelines.js';
 
 // Schema prefixes for proper table references
 const SCHEMA = {
@@ -50,7 +51,7 @@ export async function syncEstimateToGHL(estimateId) {
   try {
     logger.info('Syncing estimate to GHL', { estimateId });
     
-    // Get estimate with related data
+    // Get estimate with related data including job type
     const estimateResult = await client.query(`
       SELECT
         e.*,
@@ -66,12 +67,15 @@ export async function syncEstimateToGHL(estimateId) {
         j.job_number,
         j.summary as job_summary,
         j.business_unit_id,
+        j.job_type_id,
+        jt.name as job_type_name,
         bu.name as business_unit_name,
         bu.ghl_pipeline_id
       FROM ${SCHEMA.st}.st_estimates e
       LEFT JOIN ${SCHEMA.st}.st_customers c ON e.customer_id = c.st_id
       LEFT JOIN ${SCHEMA.st}.st_jobs j ON e.job_id = j.st_id
       LEFT JOIN ${SCHEMA.st}.st_business_units bu ON j.business_unit_id = bu.st_id
+      LEFT JOIN ${SCHEMA.st}.st_job_types jt ON j.job_type_id = jt.st_id
       WHERE e.st_id = $1
     `, [estimateId]);
     
@@ -144,24 +148,39 @@ export async function syncEstimateToGHL(estimateId) {
     // Get pipeline stages to find the right one
     const stageId = await getInitialStageId(estimate.ghl_pipeline_id);
     
+    // Build custom fields with ServiceTitan data
+    const customFields = buildOpportunityCustomFields({
+      stCustomerId: estimate.customer_st_id,
+      stJobId: estimate.job_st_id,
+      stEstimateId: estimateId,
+      streetAddress: estimate.customer_address,
+      city: estimate.customer_city,
+      state: estimate.customer_state,
+      postalCode: estimate.customer_zip
+    });
+
     // Create opportunity in GHL
     const opportunityData = {
       pipelineId: estimate.ghl_pipeline_id,
       locationId: process.env.GHL_LOCATION_ID,
       name: formatOpportunityName(estimate),
       status: 'open',
-      monetaryValue: Number(estimate.total) || 0
+      monetaryValue: Number(estimate.total) || 0,
+      customFields: customFields
     };
-    
+
     if (stageId) {
       opportunityData.pipelineStageId = stageId;
     }
-    
+
     if (ghlContactId) {
       opportunityData.contactId = ghlContactId;
     }
-    
-    logger.debug('Creating GHL opportunity', opportunityData);
+
+    logger.debug('Creating GHL opportunity with custom fields', {
+      ...opportunityData,
+      customFieldCount: customFields.length
+    });
     
     const response = await ghlClient.post('/opportunities/', opportunityData);
     const createdOpp = response.data.opportunity || response.data;
@@ -223,25 +242,26 @@ export async function syncEstimateToGHL(estimateId) {
 
 /**
  * Format opportunity name from estimate
+ * Format: "Customer Name - Job Type"
  */
 function formatOpportunityName(estimate) {
   const parts = [];
-  
+
+  // Customer name is required
   if (estimate.customer_name) {
     parts.push(estimate.customer_name);
   }
-  
-  if (estimate.name) {
-    parts.push(estimate.name);
+
+  // Job type is preferred, fallback to job summary or business unit
+  if (estimate.job_type_name) {
+    parts.push(estimate.job_type_name);
   } else if (estimate.job_summary) {
     parts.push(estimate.job_summary);
+  } else if (estimate.business_unit_name) {
+    parts.push(estimate.business_unit_name);
   }
-  
-  if (estimate.total && Number(estimate.total) > 0) {
-    parts.push(`$${Number(estimate.total).toLocaleString()}`);
-  }
-  
-  return parts.join(' - ') || `Estimate #${estimate.st_id}`;
+
+  return parts.join(' - ') || `Opportunity #${estimate.st_id}`;
 }
 
 /**
@@ -281,8 +301,8 @@ async function createGHLContact(client, customer) {
       source: 'ServiceTitan',
       customFields: [
         {
-          key: 'st_customer_id',
-          field_value: String(customer.st_id)
+          id: GHL_CUSTOM_FIELDS.ST_CUSTOMER_ID,
+          value: String(customer.st_id)
         }
       ]
     };

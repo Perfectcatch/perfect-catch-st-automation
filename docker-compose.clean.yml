@@ -1,0 +1,39 @@
+services:
+  st-automation:
+    build: .
+    container_name: st-automation
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://postgres:Catchadmin%402025@db.ereuwdjrnpzfbumbwjxe.supabase.co:5432/postgres
+    ports:
+      - "3001:3000"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.st-automation.rule=Host(`st.lazilabs.com`)"
+      - "traefik.http.routers.st-automation.tls.certresolver=letsencrypt"
+      - "traefik.http.services.st-automation.loadbalancer.server.port=3000"
+    networks:
+      - traefik-net
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+networks:
+  traefik-net:
+    external: true

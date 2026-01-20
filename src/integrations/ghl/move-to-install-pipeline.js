@@ -9,7 +9,7 @@
 import axios from 'axios';
 import { createLogger } from '../../lib/logger.js';
 import { getPool } from '../../services/sync/sync-base.js';
-import { GHL_PIPELINES, GHL_LOCATION_ID } from '../../config/ghl-pipelines.js';
+import { GHL_PIPELINES, GHL_LOCATION_ID, buildOpportunityCustomFields } from '../../config/ghl-pipelines.js';
 
 const logger = createLogger('ghl-install-pipeline');
 
@@ -47,22 +47,23 @@ export async function moveOpportunityToInstallPipeline(installJobId, customerId,
     logger.info('Moving opportunity to Install Pipeline', { installJobId, customerId });
 
     // Find the GHL opportunity for this customer in the Sales Pipeline (Job Sold stage)
+    // Find opportunity via st_job_id -> st_jobs -> customer_id match
     const oppResult = await client.query(`
       SELECT
         o.ghl_id,
         o.name,
         o.monetary_value,
-        o.ghl_pipeline_id,
-        o.ghl_pipeline_stage_id,
-        o.stage_name,
-        o.ghl_contact_id,
-        o.st_customer_id,
-        o.st_job_id
+        o.pipeline_id,
+        o.pipeline_stage_id,
+        o.contact_id as ghl_contact_id,
+        o.st_job_id,
+        j.customer_id as st_customer_id
       FROM ${SCHEMA.ghl}.ghl_opportunities o
-      WHERE o.st_customer_id = $1
-        AND o.ghl_pipeline_id = $2
-        AND o.ghl_pipeline_stage_id = $3
-      ORDER BY o.ghl_created_at DESC
+      JOIN ${SCHEMA.st}.st_jobs j ON o.st_job_id = j.st_id
+      WHERE j.customer_id = $1
+        AND o.pipeline_id = $2
+        AND o.pipeline_stage_id = $3
+      ORDER BY o.created_at DESC
       LIMIT 1
     `, [customerId, GHL_PIPELINES.SALES_PIPELINE.id, GHL_PIPELINES.SALES_PIPELINE.stages.JOB_SOLD]);
 
@@ -73,13 +74,18 @@ export async function moveOpportunityToInstallPipeline(installJobId, customerId,
       return null;
     }
 
-    // Get install job details for naming
+    // Get install job details for naming and custom fields
     const jobResult = await client.query(`
       SELECT
         j.st_id,
         j.job_number,
         j.summary,
-        c.name as customer_name
+        j.customer_id,
+        c.name as customer_name,
+        c.address_line1 as street_address,
+        c.city,
+        c.state,
+        c.zip as postal_code
       FROM ${SCHEMA.st}.st_jobs j
       JOIN ${SCHEMA.st}.st_customers c ON j.customer_id = c.st_id
       WHERE j.st_id = $1
@@ -87,10 +93,21 @@ export async function moveOpportunityToInstallPipeline(installJobId, customerId,
 
     const installJob = jobResult.rows[0];
 
+    // Build custom fields with install job data
+    const customFields = buildOpportunityCustomFields({
+      stCustomerId: installJob?.customer_id || customerId,
+      stJobId: installJobId,
+      streetAddress: installJob?.street_address,
+      city: installJob?.city,
+      state: installJob?.state,
+      postalCode: installJob?.postal_code
+    });
+
     // Update opportunity in GHL - move to Install Pipeline
     const updateData = {
       pipelineId: GHL_PIPELINES.INSTALL_PIPELINE.id,
-      pipelineStageId: GHL_PIPELINES.INSTALL_PIPELINE.stages.ESTIMATE_APPROVED_JOB_CREATED
+      pipelineStageId: GHL_PIPELINES.INSTALL_PIPELINE.stages.ESTIMATE_APPROVED_JOB_CREATED,
+      customFields: customFields
     };
 
     // Optionally update the name to reflect install job
@@ -103,20 +120,16 @@ export async function moveOpportunityToInstallPipeline(installJobId, customerId,
     // Update local database
     await client.query(`
       UPDATE ${SCHEMA.ghl}.ghl_opportunities
-      SET ghl_pipeline_id = $2,
-          pipeline_name = $3,
-          ghl_pipeline_stage_id = $4,
-          stage_name = $5,
-          st_job_id = $6,
-          name = COALESCE($7, name),
-          local_updated_at = NOW()
+      SET pipeline_id = $2,
+          pipeline_stage_id = $3,
+          st_job_id = $4,
+          name = COALESCE($5, name),
+          updated_at = NOW()
       WHERE ghl_id = $1
     `, [
       opportunity.ghl_id,
       GHL_PIPELINES.INSTALL_PIPELINE.id,
-      GHL_PIPELINES.INSTALL_PIPELINE.name,
       GHL_PIPELINES.INSTALL_PIPELINE.stages.ESTIMATE_APPROVED_JOB_CREATED,
-      'Estimate Approved / Job Created',
       installJobId,
       updateData.name
     ]);
@@ -154,6 +167,7 @@ export async function detectInstallJobsNeedingMove() {
 
   try {
     // Find install jobs with customers who have opportunities still in Job Sold stage
+    // Join through st_jobs to find opportunities linked to the same customer
     const result = await client.query(`
       SELECT
         ij.st_id as install_job_id,
@@ -162,16 +176,19 @@ export async function detectInstallJobsNeedingMove() {
         c.name as customer_name,
         ibu.name as install_bu,
         o.ghl_id as opportunity_id,
-        o.stage_name,
+        o.pipeline_stage_id,
         ij.st_created_on
       FROM ${SCHEMA.st}.st_jobs ij
       JOIN ${SCHEMA.st}.st_business_units ibu ON ij.business_unit_id = ibu.st_id
       JOIN ${SCHEMA.st}.st_customers c ON ij.customer_id = c.st_id
-      JOIN ${SCHEMA.ghl}.ghl_opportunities o ON o.st_customer_id = c.st_id
+      -- Find opportunities linked to jobs for the same customer
+      JOIN ${SCHEMA.st}.st_jobs oj ON oj.customer_id = c.st_id
+      JOIN ${SCHEMA.ghl}.ghl_opportunities o ON o.st_job_id = oj.st_id
       WHERE ibu.name LIKE '%Install%'
-        AND o.ghl_pipeline_id = $1
-        AND o.ghl_pipeline_stage_id = $2
+        AND o.pipeline_id = $1
+        AND o.pipeline_stage_id = $2
         AND ij.st_created_on >= NOW() - INTERVAL '7 days'
+        AND ij.st_id != oj.st_id  -- Exclude the install job itself
       ORDER BY ij.st_created_on DESC
     `, [GHL_PIPELINES.SALES_PIPELINE.id, GHL_PIPELINES.SALES_PIPELINE.stages.JOB_SOLD]);
 

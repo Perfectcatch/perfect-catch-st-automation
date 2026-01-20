@@ -13,6 +13,11 @@ const __dirname = path.dirname(__filename);
 import config from './config/index.js';
 import routes from './routes/index.js';
 import { requestLogger, errorHandler, apiKeyAuth, notFound } from './middleware/index.js';
+
+// New modular routes (refactored)
+import newHealthRoutes from './routes-new/health/index.js';
+import newGhlRoutes from './routes-new/ghl/index.js';
+import workers from './workers-new/index.js';
 import { createLogger } from './lib/logger.js';
 
 const logger = createLogger('app');
@@ -183,6 +188,50 @@ app.get('/monitor', (req, res) => {
 
 // Mount all routes
 app.use('/', routes);
+
+// ---------------------------------------------------------------
+// NEW MODULAR ROUTES (refactored - one file per endpoint)
+// ---------------------------------------------------------------
+
+// New health endpoints: /health/ready, /health/live, /health/detailed, /health/metrics
+app.use('/health', newHealthRoutes);
+
+// New GHL routes: /ghl/* (pipelines, opportunities, sync, webhooks)
+app.use('/ghl', newGhlRoutes);
+
+// Worker management endpoints
+app.get('/workers/status', (req, res) => {
+  res.json({ success: true, workers: workers.getWorkersStatus() });
+});
+
+app.post('/workers/:name/run', async (req, res) => {
+  try {
+    const result = await workers.runWorker(req.params.name);
+    res.json({ success: true, result });
+  } catch (error) {
+    res.status(error.message.includes('not found') ? 404 : 500).json({
+      success: false, error: error.message
+    });
+  }
+});
+
+app.post('/workers/:name/enable', (req, res) => {
+  try {
+    workers.enableWorker(req.params.name);
+    res.json({ success: true, message: `Worker ${req.params.name} enabled` });
+  } catch (error) {
+    res.status(404).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/workers/:name/disable', (req, res) => {
+  try {
+    workers.disableWorker(req.params.name);
+    res.json({ success: true, message: `Worker ${req.params.name} disabled` });
+  } catch (error) {
+    res.status(404).json({ success: false, error: error.message });
+  }
+});
 
 // Mount pricebook sync routes (conditionally - requires sync engine)
 app.use('/api/sync/pricebook', async (req, res, next) => {

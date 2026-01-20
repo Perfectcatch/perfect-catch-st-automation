@@ -27,6 +27,21 @@ export { syncEstimateToGHL, syncCustomerToGHL, moveOpportunityToJobSold } from '
 
 // Pipeline movements
 export { moveOpportunityToInstallPipeline, processInstallJobMoves } from './move-to-install-pipeline.js';
+export { moveOpportunityToInProgress, processInProgressMoves } from './move-to-in-progress.js';
+
+// Pipeline API utilities
+export {
+  getPipelines,
+  getPipelineStages,
+  updateOpportunityStage,
+  getOpportunity,
+  createOpportunity,
+  searchContacts,
+  createContact
+} from './pipelines.js';
+
+// Backfill utilities
+export { backfillAllOpportunities, backfillOpportunity } from './backfill-opportunities.js';
 
 /**
  * Run full GHL sync (contacts first, then opportunities)

@@ -378,14 +378,14 @@ router.get('/sync/status', async (req, res) => {
     // Get opportunity counts by pipeline/stage
     const opportunityStats = await client.query(`
       SELECT
-        pipeline_name,
-        stage_name,
+        pipeline_id,
+        pipeline_stage_id,
         COUNT(*) as count,
         SUM(monetary_value) as total_value
       FROM ${SCHEMA.ghl}.ghl_opportunities
       WHERE status = 'open'
-      GROUP BY pipeline_name, stage_name
-      ORDER BY pipeline_name, stage_name
+      GROUP BY pipeline_id, pipeline_stage_id
+      ORDER BY pipeline_id, pipeline_stage_id
     `);
 
     // Get contact count

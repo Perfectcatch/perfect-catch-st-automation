@@ -7,3 +7,4 @@ export { requestLogger } from './requestLogger.js';
 export { errorHandler } from './errorHandler.js';
 export { apiKeyAuth, requireApiKey } from './apiKeyAuth.js';
 export { notFound } from './notFound.js';
+export { asyncHandler } from './asyncHandler.js';

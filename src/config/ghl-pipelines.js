@@ -20,7 +20,19 @@ export const GHL_PIPELINES = {
     }
   },
 
-  // SALES PIPELINE - For sales opportunities
+  // SALES PIPELINE - For sales opportunities with full lifecycle tracking
+  // Updated stages (11 total):
+  // 1. New Lead
+  // 2. Contacted
+  // 3. Appointment Scheduled
+  // 4. Appointment Completed - Proposal Sent
+  // 5. Estimate Follow-Up
+  // 6. Job Sold
+  // 7. Install Scheduled
+  // 8. Install In Progress
+  // 9. Install Complete
+  // 10. Closed Won
+  // 11. Estimate Lost / Not Approved
   SALES_PIPELINE: {
     id: 'fWJfnMsPzwOXgKdWxdjC',
     name: 'SALES PIPELINE',
@@ -31,6 +43,11 @@ export const GHL_PIPELINES = {
       APPOINTMENT_COMPLETED_PROPOSAL_SENT: 'a75d3c82-8e40-4624-a401-ccf1cc52cca7',
       ESTIMATE_FOLLOW_UP: 'de5601ac-5dbe-4980-a960-b1699b9f4a74',
       JOB_SOLD: '97703c8d-1dc6-46f3-a537-601678cedebd',
+      // New stages for install tracking within Sales Pipeline
+      INSTALL_SCHEDULED: process.env.GHL_STAGE_INSTALL_SCHEDULED || '83ab7d1a-8ee2-4be9-9e99-5e619872f912',
+      INSTALL_IN_PROGRESS: process.env.GHL_STAGE_INSTALL_IN_PROGRESS || '61c785fa-2f44-4f2c-a983-e7941c25595c',
+      INSTALL_COMPLETE: process.env.GHL_STAGE_INSTALL_COMPLETE || 'da133e98-018f-4b7b-bfc4-efe1db9f981b',
+      CLOSED_WON: process.env.GHL_STAGE_CLOSED_WON || '9256d160-ce77-4ee5-9bef-587ddf75c66d',
       ESTIMATE_LOST_NOT_APPROVED: 'a7ca7df5-0d82-4bd6-9b79-27f4b124a1db'
     }
   },
@@ -75,5 +92,68 @@ export function getStageName(pipelineKey, stageId) {
 
 // GHL Location ID
 export const GHL_LOCATION_ID = 'kgnEweBlJ8Uq11kNc3Xs';
+
+/**
+ * GHL Custom Field IDs for Opportunities
+ * These are used to store ServiceTitan data on GHL opportunities
+ */
+export const GHL_CUSTOM_FIELDS = {
+  // ServiceTitan IDs
+  ST_CUSTOMER_ID: process.env.GHL_CF_ST_CUSTOMER_ID || 'UmZtVMArKf1LcpAQYXB9',
+  ST_JOB_ID: process.env.GHL_CF_ST_JOB_ID || 'jjF7MFNJuSh3FzNVWCz2',
+  ST_ESTIMATE_ID: process.env.GHL_CF_ST_ESTIMATE_ID || 'mu28MflNiJ4tVuqeMeVE',
+
+  // Address fields
+  ST_STREET_ADDRESS: process.env.GHL_CF_ST_STREET_ADDRESS || '6ymQxIlXsWNkUMkqbz9C',
+  ST_CITY: process.env.GHL_CF_ST_CITY || 'h9fGoisfSSjDJi3hh7Ql',
+  ST_STATE: process.env.GHL_CF_ST_STATE || '7WT8DvJjpRx6pigxjbzf',
+  ST_POSTAL_CODE: process.env.GHL_CF_ST_POSTAL_CODE || 'lpkRLhViMmeF7RLRwGMT',
+
+  // Technician fields
+  TECHS: process.env.GHL_CF_TECHS || 'sJ3jmGpHGFUssEVZ9Npi',
+  TECHNICIAN: process.env.GHL_CF_TECHNICIAN || 'UtUjwSDe758kTey8ABqk',
+
+  // Estimate data
+  ST_ESTIMATES_DATA: process.env.GHL_CF_ST_ESTIMATES_DATA || 'xnlxjYOUDoNaNnrqQUEy'
+};
+
+/**
+ * Build custom fields array for GHL API
+ * @param {object} data - Data to convert to custom fields
+ * @returns {Array} - Array of custom field objects for GHL API
+ */
+export function buildOpportunityCustomFields(data) {
+  const customFields = [];
+
+  if (data.stCustomerId) {
+    customFields.push({ id: GHL_CUSTOM_FIELDS.ST_CUSTOMER_ID, value: String(data.stCustomerId) });
+  }
+  if (data.stJobId) {
+    customFields.push({ id: GHL_CUSTOM_FIELDS.ST_JOB_ID, value: String(data.stJobId) });
+  }
+  if (data.stEstimateId) {
+    customFields.push({ id: GHL_CUSTOM_FIELDS.ST_ESTIMATE_ID, value: String(data.stEstimateId) });
+  }
+  if (data.streetAddress) {
+    customFields.push({ id: GHL_CUSTOM_FIELDS.ST_STREET_ADDRESS, value: data.streetAddress });
+  }
+  if (data.city) {
+    customFields.push({ id: GHL_CUSTOM_FIELDS.ST_CITY, value: data.city });
+  }
+  if (data.state) {
+    customFields.push({ id: GHL_CUSTOM_FIELDS.ST_STATE, value: data.state });
+  }
+  if (data.postalCode) {
+    customFields.push({ id: GHL_CUSTOM_FIELDS.ST_POSTAL_CODE, value: data.postalCode });
+  }
+  if (data.technician) {
+    customFields.push({ id: GHL_CUSTOM_FIELDS.TECHNICIAN, value: data.technician });
+  }
+  if (data.techs) {
+    customFields.push({ id: GHL_CUSTOM_FIELDS.TECHS, value: data.techs });
+  }
+
+  return customFields;
+}
 
 export default GHL_PIPELINES;
